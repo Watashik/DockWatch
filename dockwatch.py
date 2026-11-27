@@ -106,6 +106,8 @@ TR = {
     "pd_source": {"uk": "🔌 віддає живлення · {mode} · до {a} A", "ru": "🔌 отдаёт питание · {mode} · до {a} A",
                   "en": "🔌 supplying power · {mode} · up to {a} A"},
     "pd_sink": {"uk": "🔌 заряджається · {mode} · {w}", "ru": "🔌 заряжается · {mode} · {w}", "en": "🔌 charging · {mode} · {w}"},
+    "rpm": {"uk": "об/хв", "ru": "об/мин", "en": "RPM"},
+    "fan_off": {"uk": "вентилятор стоїть", "ru": "вентилятор стоит", "en": "fan stopped"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
@@ -447,6 +449,43 @@ def typec_info(port):
     return tr("pd_sink", mode=mode or "USB-C", w=w).rstrip(" ·")
 
 
+def sensors():
+    """Температуры (CPU, GPU, SSD) и обороты вентиляторов из hwmon — без root."""
+    temps, fans = {}, []
+    want = {"k10temp": ("CPU", "Tctl"), "coretemp": ("CPU", "Package id 0"), "zenpower": ("CPU", "Tdie"),
+            "amdgpu": ("GPU", "edge"), "nouveau": ("GPU", ""), "nvme": ("SSD", "Composite")}
+    for h in sorted(glob.glob("/sys/class/hwmon/hwmon*")):
+        name = rd(f"{h}/name")
+        if name in want:
+            key, label = want[name]
+            for t in sorted(glob.glob(f"{h}/temp*_input")):
+                if not label or rd(t.replace("_input", "_label")) == label:
+                    v = rd(t)
+                    if v.lstrip("-").isdigit() and key not in temps:
+                        temps[key] = int(v) / 1000
+                    break
+        if name == "thinkpad" and "CPU" not in temps:
+            v = rd(f"{h}/temp1_input")
+            if v.isdigit() and int(v) > 0:
+                temps["CPU"] = int(v) / 1000
+        for f in sorted(glob.glob(f"{h}/fan*_input")):
+            v = rd(f)
+            if v.isdigit():
+                fans.append(int(v))
+    return {"temps": temps, "fans": fans}
+
+
+def sensors_lines(sn):
+    order = sorted(sn["temps"].items(), key=lambda kv: ("CPU", "GPU", "SSD").index(kv[0]) if kv[0] in ("CPU", "GPU", "SSD") else 9)
+    temps = ("🌡 " + " · ".join(f"{k} {v:.0f}°C" for k, v in order)) if order else ""
+    fans = " · ".join((f"🌀 {f} {tr('rpm')}" if f else f"🌀 {tr('fan_off')}") for f in sn["fans"])
+    return [x for x in (temps, fans) if x]
+
+
+def sensors_text(sn):
+    return "   ".join(sensors_lines(sn))
+
+
 def human(n):
     for u in ("B", "KB", "MB", "GB", "TB"):
         if n < 1024:
@@ -543,7 +582,7 @@ def snapshot(cfg=None):
     busy = sum(p["busy"] for p in ports.values())
     return {"docked": docked, "groups": groups, "ports": ports, "loose": loose, "loose_stats": loose_stats,
             "busy": busy, "total": len(ports), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden,
-            "show_stats": show, "ts": time.time()}
+            "show_stats": show, "sensors": sensors(), "ts": time.time()}
 
 
 def diff(old, new):
@@ -578,6 +617,8 @@ def dump():
             if p["g"] == g["id"]:
                 det = "; ".join(i + (f"  [{st}]" if st else "") for i, st in zip(p["items"], p["stats"]))
                 print(f"  {'●' if p['busy'] else '○'} {p['label']:<9} {det}")
+    if sensors_text(s["sensors"]):
+        print(sensors_text(s["sensors"]))
     if s["loose"]:
         print(tr("loose_hint"))
         for x in s["loose"]:
@@ -698,6 +739,9 @@ def tui():
                         put(y + 3, x - len(lab) // 2, lab, red if p["busy"] else dim)
                     x0 += gw + 1
                 y += 6
+            if sensors_text(s["sensors"]):
+                put(y - 1, 3, sensors_text(s["sensors"]), dim)
+                y += 1
             put(y, 1, tr("connected"), wht | curses.A_BOLD)
             y += 1
             rows = [(p["label"], it, red) for p in s["ports"].values() for it in p["items"]]
@@ -879,10 +923,28 @@ def qt_app(mode):
             q.setPen(QPen(QColor(255, 255, 255, 14), 1)); q.drawLine(r.left() + 8, r.top() + 1.5, r.right() - 8, r.top() + 1.5)
             if g.get("vents"):
                 a, b = g["vents"]
-                q.setPen(Qt.NoPen); q.setBrush(HOLE)
-                x = r.left() + r.width() * a
-                while x < r.left() + r.width() * b - 10:
+                sn = self.s.get("sensors", {"temps": {}, "fans": []})
+                hot = max(sn["temps"].values(), default=0)
+                k = min(1.0, max(0.0, (hot - 45) / 45))  # 45°C — тёмная, 90°C — раскалённая
+                fill = QColor(int(7 + (150 - 7) * k), int(7 + (18 - 7) * k), int(7 + (14 - 7) * k))
+                q.setPen(Qt.NoPen); q.setBrush(fill)
+                x0, x1 = r.left() + r.width() * a, r.left() + r.width() * b
+                x = x0
+                while x < x1 - 10:
                     q.drawRoundedRect(QRectF(x, r.center().y() - 12, 10, 24), 2, 2); x += 19
+                lines = sensors_lines(sn)
+                if lines:
+                    f = font(11)
+                    fm = QFontMetricsF(f)
+                    lines = [fm.elidedText(t, Qt.ElideRight, x1 - x0 - 20) for t in lines]
+                    tw = max(fm.horizontalAdvance(t) for t in lines) + 20
+                    ph = 17 * len(lines) + 8
+                    pill = QRectF((x0 + x1) / 2 - tw / 2, r.center().y() - ph / 2, tw, ph)
+                    q.setBrush(QColor(12, 12, 13, 225)); q.setPen(QPen(QColor("#2e2e30"), 1)); q.drawRoundedRect(pill, 9, 9)
+                    q.setFont(f)
+                    for i, t in enumerate(lines):
+                        q.setPen((QColor("#e0a0a3") if k > 0.5 else TXT) if i == 0 else DIM)
+                        q.drawText(QRectF(pill.left(), pill.top() + 4 + i * 17, tw, 17), Qt.AlignCenter, t)
 
         def paintEvent(self, ev):
             q = QPainter(self)
