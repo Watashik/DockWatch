@@ -2,15 +2,16 @@
   "id": "lenovo-thinkpad-pro-dock-40ah",
   "name": "ThinkPad Pro Dock (40AH) — draft",
   "draft": true,
-  "note": "Layout from a photo. USB hub IDs unknown: choose the dock manually in the menu, run calibration, send `dockwatch report` with the dock attached to enable auto-detection.",
+  "note": "Layout from a photo. USB hub IDs unknown: choose the dock manually in the menu, run calibration, send `dockwatch report` with the dock attached to enable auto-detection. Lenovo/TLP: the CS18 family (40AG/40AH/40AJ) shares the dock audio 17ef:306f; hubs assumed the same as 40AJ (17ef:3070/3071), so it cannot be told apart from 40AJ automatically yet.",
   "match": {"usb_hubs": []},
-  "usb_hubs": {},
+  "usb_hubs": {"17ef:3070": "usb3", "17ef:3071": "usb2"},
+  "internal_usb": ["17ef:306f"],
   "groups": [
     {"id": "dock", "row": 0, "w": 1.0, "height": 96, "tower": true,
      "title": {"uk": "ThinkPad Pro Dock · задня панель", "ru": "ThinkPad Pro Dock · задняя панель", "en": "ThinkPad Pro Dock · rear panel"}}
   ],
   "ports": [
-    {"id": "audio", "kind": "audio", "g": "dock", "x": 0.294, "mark": "🎧", "label": "@audio", "role": "jack"},
+    {"id": "audio", "kind": "audio", "g": "dock", "x": 0.294, "mark": "🎧", "label": "@audio", "role": "usb_audio", "match_sink": "ThinkPad_Dock"},
     {"id": "power", "kind": "dc", "g": "dock", "x": 0.348, "mark": "⎓", "label": "@power", "role": "power"},
     {"id": "dp1", "kind": "dp", "g": "dock", "x": 0.425, "mark": "D▸", "label": "DP 1", "video": true},
     {"id": "dp2", "kind": "dp", "g": "dock", "x": 0.510, "mark": "D▸", "label": "DP 2", "video": true},
