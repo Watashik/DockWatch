@@ -53,17 +53,6 @@
         "ru": "правый бок",
         "en": "right side"
       }
-    },
-    {
-      "id": "bottom",
-      "row": 0,
-      "w": 0.16,
-      "height": 62,
-      "title": {
-        "uk": "низ корпусу",
-        "ru": "низ корпуса",
-        "en": "bottom"
-      }
     }
   ],
   "ports": [
@@ -101,19 +90,10 @@
       "label": "Smart Card"
     },
     {
-      "id": "b_dock",
-      "kind": "dockport",
-      "g": "bottom",
-      "x": 0.5,
-      "mark": "⇆",
-      "label": "@dock",
-      "role": "dock"
-    },
-    {
       "id": "r_sd",
       "kind": "sdslot",
       "g": "right",
-      "x": 0.12,
+      "x": 0.1,
       "mark": "SD",
       "label": "@card",
       "role": "card"
@@ -122,7 +102,7 @@
       "id": "r_usbc",
       "kind": "usbc",
       "g": "right",
-      "x": 0.3,
+      "x": 0.26,
       "mark": "⇆",
       "label": "USB-C"
     },
@@ -130,7 +110,7 @@
       "id": "r_usb",
       "kind": "usb",
       "g": "right",
-      "x": 0.47,
+      "x": 0.41,
       "mark": "SS⚡",
       "label": "USB ⚡"
     },
@@ -138,7 +118,7 @@
       "id": "r_hdmi",
       "kind": "hdmi",
       "g": "right",
-      "x": 0.63,
+      "x": 0.56,
       "mark": "HDMI",
       "label": "HDMI",
       "video": true,
@@ -147,10 +127,19 @@
       ]
     },
     {
+      "id": "r_dock",
+      "kind": "sidedock",
+      "g": "right",
+      "x": 0.74,
+      "mark": "⇆",
+      "label": "@dock",
+      "role": "dock"
+    },
+    {
       "id": "r_power",
       "kind": "barrel",
       "g": "right",
-      "x": 0.91,
+      "x": 0.92,
       "mark": "⎓",
       "label": "@power",
       "role": "power"
