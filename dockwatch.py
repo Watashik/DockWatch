@@ -1266,7 +1266,11 @@ def snapshot(cfg=None):
             continue
         warn = (dock_compat(dock, laptop, docked) if where == "dock" else "") or compat_note(prof, cfg)
         for g in prof.get("groups", []):
-            groups.append(dict(g, owner=where, title=pick(g.get("title", g["id"]))))
+            title = pick(g.get("title", g["id"]))
+            if where == "dock" and prof.get("name"):  # у дока в заголовке — полное название с моделью
+                side = title.split(" · ", 1)[1] if " · " in title else title
+                title = re.sub(r"\s+—\s+draft$", "", prof["name"]) + " · " + side
+            groups.append(dict(g, owner=where, title=title))
             if warn and not g.get("bezel"):  # предупреждение о совместимости — у первого корпуса профиля
                 groups[-1]["compat"], warn = warn, ""
         for p in prof.get("ports", []):
@@ -1456,6 +1460,26 @@ def compat_note(prof, cfg):
     if prof.get("id") in cfg.get("calibrated", []):
         return ""  # уже откалибровано на этой машине
     return tr("compat_photo")
+
+
+MAKERS = [("thinkpad", "Lenovo"), ("ideapad", "Lenovo"), ("legion", "Lenovo"), ("yoga", "Lenovo"), ("lenovo", "Lenovo"),
+          ("elitebook", "HP"), ("probook", "HP"), ("zbook", "HP"), ("omen", "HP"), ("victus", "HP"), ("pavilion", "HP"),
+          ("hp", "HP"), ("hewlett", "HP"), ("nitro", "acer"), ("predator", "acer"), ("aspire", "acer"), ("acer", "acer"),
+          ("asus", "ASUS"), ("rog", "ASUS"), ("zenbook", "ASUS"), ("vivobook", "ASUS"), ("dell", "DELL"), ("latitude", "DELL"),
+          ("xps", "DELL"), ("alienware", "DELL"), ("msi", "MSI"), ("micro-star", "MSI"), ("razer", "RAZER"),
+          ("samsung", "SAMSUNG"), ("huawei", "HUAWEI"), ("honor", "HONOR"), ("xiaomi", "Xiaomi"), ("redmi", "Xiaomi"),
+          ("gigabyte", "GIGABYTE"), ("aorus", "GIGABYTE"), ("framework", "Framework"), ("apple", "Apple"), ("pixus", "Pixus")]
+
+
+def maker_of(laptop):
+    """Фирма ноутбука: поле maker в профиле, иначе по названию модели."""
+    if not laptop:
+        return ""
+    if laptop.get("maker"):
+        return laptop["maker"]
+    words = re.findall(r"[a-z\-]+", (laptop.get("name", "") + " " + rd("/sys/class/dmi/id/sys_vendor") if laptop.get("auto")
+                                      else laptop.get("name", "")).lower())
+    return next((m for k, m in MAKERS if k in words), "")
 
 
 def dock_compat(dock, laptop, docked):
@@ -2253,6 +2277,12 @@ def qt_app(mode):
             lp = self.logos.get("lenovo") if self.dark() and THEME["name"] != "ibm" and is_tp else None
             if lp:
                 q.drawPixmap(QRectF(W - 24 - 100, 22, 100, 100 * lp.height() / lp.width()), lp, QRectF(lp.rect()))
+            else:  # название фирмы над батареей
+                mk = maker_of(self.s.get("laptop"))
+                if mk:
+                    q.setFont(font(20, bold=True)); q.setPen(TXT)
+                    q.drawText(QRectF(W - 284, 14, 260, 28), Qt.AlignRight | Qt.AlignVCenter, mk)
+                    q.setPen(DIM)
             p = self.s["power"]
             if p["pct"]:
                 txt = tr("bat_head", p=p["pct"], st=tr(p["status"]) if p["status"] else "")
