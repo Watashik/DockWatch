@@ -952,20 +952,25 @@ def qt_app(mode):
                 rows.append(("—", tr("dock_hidden"), "", DIM))
             if not rows:
                 q.setPen(DIM); q.drawText(QPointF(40, yy), tr("nothing")); yy += 20
-            for lab, it, st, col in rows[: max(1, int((H - yy - 50) // 20))]:
-                q.setPen(Qt.NoPen); q.setBrush(col); q.drawEllipse(QPointF(36, yy - 4), 3.5, 3.5)
-                q.setPen(col); q.drawText(QPointF(48, yy), lab); q.setPen(TXT); q.drawText(QPointF(140, yy), it)
-                if st:
-                    fm = QFontMetricsF(font(13))
-                    q.setFont(font(12)); q.setPen(QColor("#b5565a"))
-                    q.drawText(QPointF(150 + fm.horizontalAdvance(it), yy), st)
-                    q.setFont(font(13))
-                yy += 20
             ex = W * 0.60
+            colw = ex - 150 - 20  # текст списка не должен залезать на колонку «События»
+            for lab, it, st, col in rows:
+                if yy > H - 50 - (16 if st else 0):
+                    break
+                q.setPen(Qt.NoPen); q.setBrush(col); q.drawEllipse(QPointF(36, yy - 4), 3.5, 3.5)
+                q.setFont(font(13)); q.setPen(col); q.drawText(QPointF(48, yy), lab)
+                fm = QFontMetricsF(font(13))
+                q.setPen(TXT); q.drawText(QPointF(140, yy), fm.elidedText(it, Qt.ElideRight, colw))
+                if st:  # потребление/нагрузка — отдельной строкой под устройством
+                    yy += 16
+                    q.setFont(font(11)); q.setPen(QColor("#b5565a"))
+                    q.drawText(QPointF(150, yy), QFontMetricsF(font(11)).elidedText(st, Qt.ElideRight, colw - 10))
+                yy += 21
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(ex, y + 6), tr("events"))
             q.setFont(font(12)); q.setPen(DIM)
+            efm = QFontMetricsF(font(12))
             for i, e in enumerate(self.log or [tr("quiet")]):
-                q.drawText(QPointF(ex + 8, y + 28 + i * 19), e)
+                q.drawText(QPointF(ex + 8, y + 28 + i * 19), efm.elidedText(e, Qt.ElideRight, W - ex - 32))
             # footer like the wallpaper: IBM — red line — Technologies and Design
             fy = H - 24
             ib = self.logos.get("ibm")
