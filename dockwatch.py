@@ -163,6 +163,8 @@ TR = {
     "theme_ibm": {"uk": "IBM (червоний, синій, зелений)", "ru": "IBM (красный, синий, зелёный)", "en": "IBM (red, blue, green)"},
     "theme_light": {"uk": "Світла", "ru": "Светлая", "en": "Light"},
     "close": {"uk": "Закрити", "ru": "Закрыть", "en": "Close"},
+    "kbd": {"uk": "Підсвітка клавіатури", "ru": "Подсветка клавиатуры", "en": "Keyboard backlight"},
+    "kbd_off": {"uk": "вимкнена", "ru": "выключена", "en": "off"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
@@ -719,6 +721,9 @@ def media_state():
             continue  # слушают выход (визуализаторы), а не микрофон, или стоят на паузе
         pr = o.get("properties", {})
         m["mic_users"].append(pr.get("application.name") or pr.get("application.process.binary") or pr.get("media.name") or "?")
+    kb = next(iter(glob.glob("/sys/class/leds/*kbd_backlight")), None)
+    m["kbd"] = int(rd(f"{kb}/brightness", "0") or 0) if kb else None
+    m["kbd_max"] = int(rd(f"{kb}/max_brightness", "0") or 0) if kb else 0
     cams = sorted(glob.glob("/dev/video*"))
     m["cam_present"] = bool(cams)
     m["cam_name"] = rd("/sys/class/video4linux/video0/name").split(":")[0]
@@ -973,6 +978,8 @@ def diff(old, new):
             ev.append(f"🎙 {tr('mic')}: {tr('muted') if nm['mic_muted'] else tr('on')}")
         if om.get("cam_users") != nm.get("cam_users"):
             ev.append(f"📷 {tr('cam')}: " + (tr("cam_busy", x=", ".join(nm["cam_users"])) if nm["cam_users"] else tr("cam_free")))
+        if om.get("kbd") != nm.get("kbd") and nm.get("kbd") is not None:
+            ev.append(f"⌨ {tr('kbd')}: " + (f"{nm['kbd']}/{nm['kbd_max']}" if nm["kbd"] else tr("kbd_off")))
         if bool(om.get("mic_users")) != bool(nm.get("mic_users")):
             ev.append(f"🎙 {tr('mic')}: " + (tr("recording", x=", ".join(nm["mic_users"])) if nm["mic_users"] else tr("cam_free")))
     strip = lambda s: s.rsplit("  [", 1)[0]  # noqa: E731
@@ -1432,16 +1439,23 @@ def qt_app(mode):
             if led:
                 g = QRadialGradient(c, 10); cg = QColor(LED_ON); cg.setAlpha(150)
                 g.setColorAt(0, cg); cg.setAlpha(0); g.setColorAt(1, cg); q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawEllipse(c, 10, 10)
-            q.setPen(Qt.NoPen); q.setBrush(LED_ON if led is True else LED_OFF)
-            q.drawEllipse(c, 2.3, 2.3)
-            if led is None:
-                q.setFont(font(8)); q.setPen(DIM); q.drawText(QRectF(c.x() - 5, c.y() - 6, 10, 12), Qt.AlignCenter, "?")
+            if led is not None:  # None — у клавиши свой индикатор (рисуется отдельно)
+                q.setPen(Qt.NoPen); q.setBrush(LED_ON if led is True else LED_OFF)
+                q.drawEllipse(c, 2.3, 2.3)
 
         def header_media(self, q, kx, cx, cy, maxw):
             """F1/F4 со светодиодами после логотипа; микрофоны и камера — по центру шапки, строка состояния под ними."""
             m = self.s.get("media") or {}
             self.key(q, QRectF(kx, cy - 17, 54, 34), "🔇", "F1", bool(m.get("spk_muted")))
             self.key(q, QRectF(kx + 62, cy - 17, 54, 34), "🎙", "F4", bool(m.get("mic_muted")))
+            if m.get("kbd") is not None:  # подсветка клавиатуры (Fn+Space): уровни полосками
+                k = QRectF(kx + 124, cy - 17, 70, 34)
+                self.key(q, k, "⌨", "Fn+Space", None)
+                lvl, mx_ = m["kbd"], max(1, m["kbd_max"])
+                for i in range(mx_):
+                    on = i < lvl
+                    q.setPen(Qt.NoPen); q.setBrush(LED_ON if on else LED_OFF)
+                    q.drawRoundedRect(QRectF(k.right() - 10, k.top() + 5 + (mx_ - 1 - i) * 7, 5, 5), 1, 1)
             live = bool(m.get("mic_users")) and not m.get("mic_muted")
             for x in (cx - 56, cx + 56):
                 if live:
