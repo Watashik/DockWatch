@@ -913,6 +913,8 @@ def snapshot(cfg=None):
     def by_role(role, owner):
         return next((pid for pid, p in ports.items() if p.get("role") == role and p["owner"] == owner), None)
 
+    # привязка портов: встроенная в профиль (у одной модели топология одинаковая) + своя калибровка поверх
+    usb_map = {**(laptop or {}).get("usb", {}), **(dock or {}).get("usb", {}), **cfg["usb"]}
     seen_dirty = False
     for d in usb:
         nm = d["product"] or d["maker"] or d["vid"] + ":" + d["pid"]
@@ -931,7 +933,7 @@ def snapshot(cfg=None):
             item += f" · {speed_text(d['speed'])}"
         stat, spd = usb_stats(d["name"])
         stat = stat if show else ""
-        pid = cfg["usb"].get(d["key"])
+        pid = usb_map.get(d["key"])
         if pid in ports:
             put(pid, item, stat)
             ports[pid]["disks"] += usb_disks(d["name"])
