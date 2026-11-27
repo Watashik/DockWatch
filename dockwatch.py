@@ -1268,6 +1268,10 @@ def snapshot(cfg=None):
     for p in ports.values():
         if p["kind"] == "led":
             p["busy"] = {"power": True, "charge": bool(pw["ac"])}.get(p.get("led"), False)
+            lc = p.get("led_colors")  # {"low": "#ff3b30", "full": "#ffffff", "full_at": 90} — цвет как у настоящей лампы
+            if lc and p["busy"]:
+                pct = int(pw["pct"]) if str(pw["pct"]).isdigit() else 0
+                p["led_color"] = lc.get("full", "#ffffff") if pct >= lc.get("full_at", 90) else lc.get("low", "#ff3b30")
     busy = sum(p["busy"] for p in ports.values() if p["kind"] != "led")
     return {"docked": docked, "groups": groups, "ports": ports, "loose": loose, "loose_stats": loose_stats,
             "busy": busy, "total": sum(1 for p in ports.values() if p["kind"] != "led"), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden,
@@ -1746,10 +1750,11 @@ def qt_app(mode):
             elif kind in ("barrel", "barrel_led", "barrel_dot"):  # круглый разъём питания (с лампочкой сбоку/точкой)
                 path.addEllipse(QPointF(0, 0), 8, 8); inner.addEllipse(QPointF(0, 0), 2.6, 2.6)
             elif kind == "led":  # индикатор на корпусе (питание / зарядка)
+                lcol = self.s["ports"].get(pid, {}).get("led_color") if pid else None
                 if busy:
-                    g3 = QRadialGradient(QPointF(0, 0), 13); c3 = QColor(RED); c3.setAlpha(170); g3.setColorAt(0, c3)
+                    g3 = QRadialGradient(QPointF(0, 0), 13); c3 = QColor(lcol or RED); c3.setAlpha(170); g3.setColorAt(0, c3)
                     c3.setAlpha(0); g3.setColorAt(1, c3); q.setPen(Qt.NoPen); q.setBrush(QBrush(g3)); q.drawEllipse(QPointF(0, 0), 13, 13)
-                q.setPen(QPen(PORT_EDGE, 1)); q.setBrush(QColor("#e8f4ff") if busy else LED_OFF); q.drawEllipse(QPointF(0, 0), 2.6, 2.6)
+                q.setPen(QPen(PORT_EDGE, 1)); q.setBrush(QColor(lcol or "#e8f4ff") if busy else LED_OFF); q.drawEllipse(QPointF(0, 0), 2.6, 2.6)
                 q.restore()
                 return
             elif kind == "minidp":
