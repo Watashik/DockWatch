@@ -891,7 +891,8 @@ def qt_app(mode):
             if self.bg is None or self.bg.size() != self.size():
                 self.bg = texture(self.width(), self.height(), QColor("#111112"))
             q.drawPixmap(0, 0, self.bg)
-            self.scale = s = max(1.0, self.width() / BASE_W)
+            # мягкое масштабирование: на большом экране чуть крупнее, но не во всю ширину (1920 px → ×1.3)
+            self.scale = s = min(1.3, max(1.0, 1 + (self.width() / BASE_W - 1) * 0.4))
             q.scale(s, s)
             W, H = self.width() / s, self.height() / s
             # header
