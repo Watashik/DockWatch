@@ -1359,12 +1359,11 @@ def qt_app(mode):
             # bodies, row by row
             self.rects = {}
             y = 98
-            # на широком окне схема не растягивается во всю ширину: корпуса уже, разъёмы крупнее
-            CW = min(W, 1240.0)
-            off = (W - CW) / 2
+            # корпуса во всю ширину, но тонкие (по высоте — впритык к разъёмам); на широком окне разъёмы крупнее
+            CW, off = W, 0.0
             kz = min(1.45, max(1.0, W / BASE_W))
             for row in rows_of([g for g in self.s["groups"] if not g.get("bezel")]):
-                h = max(g.get("height", 70) for g in row) * (1 + (kz - 1) * 0.8)
+                h = 26 + 32 * kz
                 tower_w = 84 * (1 + (kz - 1) * 0.5) if any(g.get("tower") for g in row) else 0
                 gap = 14
                 avail = CW - 48 - tower_w - gap * (len(row) - 1)
