@@ -1149,9 +1149,10 @@ def qt_app(mode):
             self.blink ^= 1
             self.update()
 
-        def connector(self, q, kind, c, busy):
+        def connector(self, q, kind, c, busy, k=1.0):
             q.save()
             q.translate(c)
+            q.scale(k, k)
             path, inner = QPainterPath(), QPainterPath()
             if kind == "usb":
                 path.addRoundedRect(QRectF(-17, -8, 34, 16), 1.5, 1.5); inner.addRect(QRectF(-13, -5, 26, 4.5))
@@ -1358,12 +1359,16 @@ def qt_app(mode):
             # bodies, row by row
             self.rects = {}
             y = 98
+            # на широком окне схема не растягивается во всю ширину: корпуса уже, разъёмы крупнее
+            CW = min(W, 1240.0)
+            off = (W - CW) / 2
+            kz = min(1.45, max(1.0, W / BASE_W))
             for row in rows_of([g for g in self.s["groups"] if not g.get("bezel")]):
-                h = max(g.get("height", 70) for g in row)
-                tower_w = 84 if any(g.get("tower") for g in row) else 0
+                h = max(g.get("height", 70) for g in row) * (1 + (kz - 1) * 0.8)
+                tower_w = 84 * (1 + (kz - 1) * 0.5) if any(g.get("tower") for g in row) else 0
                 gap = 14
-                avail = W - 48 - tower_w - gap * (len(row) - 1)
-                x = 24.0
+                avail = CW - 48 - tower_w - gap * (len(row) - 1)
+                x = off + 24.0
                 for g in row:
                     gw = avail * g.get("w", 1.0)
                     q.setFont(font(13, italic=True)); q.setPen(DIM); q.drawText(QPointF(x + 4, y + 12), g["title"])
@@ -1374,7 +1379,7 @@ def qt_app(mode):
                             continue
                         cx, cy = r.left() + r.width() * pt["x"], r.center().y() + 3
                         busy = pt["busy"]
-                        self.connector(q, pt["kind"], QPointF(cx, cy), busy)
+                        self.connector(q, pt["kind"], QPointF(cx, cy), busy, kz)
                         q.setFont(font(10)); q.setPen(INK)
                         q.drawText(QRectF(cx - 40, r.top() + 3, 80, 14), Qt.AlignCenter, pt.get("mark", ""))
                         q.setFont(font(11, bold=busy)); q.setPen(RED if busy else DIM)
@@ -1384,13 +1389,14 @@ def qt_app(mode):
                             short = st.split(" · ")[-1] if len(st) > 18 else st
                             q.setFont(font(9)); q.setPen(QColor("#b5565a"))
                             q.drawText(QRectF(cx - 60, r.bottom() + 18, 120, 14), Qt.AlignCenter, short)
-                        self.rects[pt["id"]] = QRectF(cx - 36, r.top(), 72, r.height() + 20)
+                        self.rects[pt["id"]] = QRectF(cx - 36 * kz, r.top(), 72 * kz, r.height() + 20)
                     if g.get("tower"):
-                        self.tower(q, QRectF(W - 24 - tower_w + 8, y + 2, tower_w - 8, h + 18))
+                        self.tower(q, QRectF(off + CW - 24 - tower_w + 8, y + 2, tower_w - 8, h + 18))
                     x += gw + gap
                 y += h + (34 if all(g.get("bezel") for g in row) else
                           64 if self.s["show_stats"] or any(g.get("vents") for g in row) else 52)
-            # connected / events
+            # connected / events — в той же центральной колонке, что и схема
+            q.save(); q.translate(off, 0); W_full, W = W, CW
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(28, y + 6), tr("connected"))
             q.setFont(font(13))
             yy = y + 28
@@ -1431,6 +1437,7 @@ def qt_app(mode):
             efm = QFontMetricsF(font(12))
             for i, e in enumerate(self.log or [tr("quiet")]):
                 q.drawText(QPointF(ex + 8, y + 28 + i * 19), efm.elidedText(e, Qt.ElideRight, W - ex - 32))
+            q.restore(); W = W_full
             # footer like the wallpaper: IBM — red line — Technologies and Design
             fy = H - 24
             ib = self.logos.get("ibm")
