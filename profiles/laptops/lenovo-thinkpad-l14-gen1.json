@@ -1,5 +1,6 @@
 {
   "id": "lenovo-thinkpad-l14-gen1",
+  "verified": true,
   "name": "ThinkPad L14 Gen 1",
   "match": {
     "dmi": [

@@ -186,6 +186,15 @@ TR = {
     "e_del": {"uk": "🗑 Видалити порт", "ru": "🗑 Удалить порт", "en": "🗑 Delete port"},
     "e_label": {"uk": "Назва порту:", "ru": "Название порта:", "en": "Port name:"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
+    "compat_draft": {"uk": "⚠ чернетка: за описом або фото, не перевірено на справжньому залізі",
+                     "ru": "⚠ черновик: по описанию или фото, не проверено на настоящем железе",
+                     "en": "⚠ draft: from specs or photos, not verified on real hardware"},
+    "compat_photo": {"uk": "⚠ схема за фото — порти можуть не збігатися, пройдіть калібрування",
+                     "ru": "⚠ схема по фото — порты могут не совпадать, пройдите калибровку",
+                     "en": "⚠ laid out from photos — ports may not match, run calibration"},
+    "compat_auto": {"uk": "⚠ автоматична схема — розташування приблизне, можна виправити в редакторі",
+                    "ru": "⚠ автоматическая схема — расположение примерное, можно поправить в редакторе",
+                    "en": "⚠ automatic layout — positions are approximate, fix them in the editor"},
     "usb_slow": {"uk": "⚠ USB 3 працює як USB 2 (порт або кабель)", "ru": "⚠ USB 3 работает как USB 2 (порт или кабель)",
                  "en": "⚠ USB 3 device running at USB 2 speed (port or cable)"},
     "al_slow": {"uk": "{x}: працює на швидкості USB 2 — спробуйте інший порт або кабель",
@@ -1246,8 +1255,11 @@ def snapshot(cfg=None):
     for prof, where in ((dock, "dock"), (laptop, "laptop")):
         if not prof or (where == "dock" and dock_hidden):
             continue
+        warn = compat_note(prof, cfg)
         for g in prof.get("groups", []):
             groups.append(dict(g, owner=where, title=pick(g.get("title", g["id"]))))
+            if warn and not g.get("bezel"):  # предупреждение о совместимости — у первого корпуса профиля
+                groups[-1]["compat"], warn = warn, ""
         for p in prof.get("ports", []):
             lab = p.get("label_docked") if docked and p.get("label_docked") else p.get("label", p["id"])
             ports[p["id"]] = dict(p, owner=where, label=cfg["labels"].get(p["id"]) or pick(lab), label_default=pick(lab),
@@ -1424,6 +1436,25 @@ def alerts(s, prev, st, cfg):
     return out
 
 
+def compat_note(prof, cfg):
+    """Предупреждение о совместимости: профиль не проверен на настоящем железе."""
+    if prof.get("verified"):
+        return ""
+    if prof.get("draft"):
+        return tr("compat_draft")
+    if prof.get("auto") or str(prof.get("id", "")).startswith("user-generic"):
+        return tr("compat_auto")
+    if prof.get("id") in cfg.get("calibrated", []):
+        return ""  # уже откалибровано на этой машине
+    return tr("compat_photo")
+
+
+def mark_calibrated(cfg, s, owner):
+    prof = s.get(owner) or {}
+    if prof.get("id") and prof["id"] not in cfg.setdefault("calibrated", []):
+        cfg["calibrated"].append(prof["id"])
+
+
 def diff(old, new):
     ev = []
     if old is None:
@@ -1585,7 +1616,7 @@ def dump():
     for g in s["groups"]:
         if g.get("bezel"):
             continue
-        print(g["title"] + ":")
+        print(g["title"] + ":" + (f"  {g['compat']}" if g.get("compat") else ""))
         for p in s["ports"].values():
             if p["g"] == g["id"]:
                 det = "; ".join(i + (f"  [{st}]" if st else "") for i, st in zip(p["items"], p["stats"]))
@@ -1645,6 +1676,7 @@ def calibrate():
         keys = cal_keys(new, s["dock"])
         for k in keys:
             cfg["usb"][k] = p["id"]
+        mark_calibrated(cfg, s, p["owner"])
         print("✔", ", ".join(sorted(keys)))
     vids = [pid for pid, p in s["ports"].items() if p.get("video")]
     print(tr("cal_video", ids=" / ".join(vids)))
@@ -1708,7 +1740,7 @@ def tui():
                 x0 = 1
                 for g in row:
                     gw = int((W - 3) * g.get("w", 1.0)) - 1
-                    put(y, x0, g["title"], wht | curses.A_BOLD)
+                    put(y, x0, g["title"] + (f"  {g['compat']}" if g.get("compat") else ""), wht | curses.A_BOLD)
                     put(y + 1, x0, "┏" + "━" * (gw - 2) + "┓", dim)
                     for k in (2, 3):
                         put(y + k, x0, "┃", dim); put(y + k, x0 + gw - 1, "┃", dim)
@@ -2239,6 +2271,11 @@ def qt_app(mode):
                 for g in row:
                     gw = avail * g.get("w", 1.0) / max(1.0, wsum)  # несколько профилей в одном ряду — делим ширину
                     q.setFont(font(13, italic=True)); q.setPen(DIM); q.drawText(QPointF(x + 4, y + 12), g["title"])
+                    if g.get("compat"):  # «не проверено» рядом с заголовком
+                        tw = QFontMetricsF(font(13, italic=True)).horizontalAdvance(g["title"])
+                        f = font(11); q.setFont(f); q.setPen(QColor("#e0a040"))
+                        q.drawText(QRectF(x + tw + 16, y, gw - tw - 20, 16), Qt.AlignLeft | Qt.AlignVCenter,
+                                   QFontMetricsF(f).elidedText(g["compat"], Qt.ElideRight, gw - tw - 20))
                     r = QRectF(x, y + 20, gw, h)
                     self.grects[g["id"]] = (r, g.get("owner"))
                     self.body(q, r, g)
@@ -2686,6 +2723,7 @@ def qt_app(mode):
         cfg = load_config()
         for k in cal_keys(new, s["dock"]):
             cfg["usb"][k] = pid
+        mark_calibrated(cfg, s, s["ports"][pid]["owner"])
         save_config(cfg)
         c["bound"] += 1
         view.log.insert(0, time.strftime("%H:%M:%S  ") + tr("cal_bound", p=s["ports"][pid]["label"]))

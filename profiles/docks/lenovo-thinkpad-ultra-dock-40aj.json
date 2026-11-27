@@ -1,5 +1,6 @@
 {
   "id": "lenovo-thinkpad-ultra-dock-40aj",
+  "verified": true,
   "name": "ThinkPad Ultra Dock (40AJ)",
   "match": {
     "usb_hubs": [

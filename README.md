@@ -102,7 +102,7 @@ NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-l
 | Laptop | Acer Nitro V 15 (ANV15-51) | `profiles/laptops/acer-nitro-v15-anv15-51.json` |
 | Laptop | anything else | auto layout (see *Any laptop* above) |
 
-Only the ThinkPad L14 + 40AJ pair is calibrated on real hardware; the other laptops are laid out from photos and need
+Only the ThinkPad L14 + 40AJ pair is verified on real hardware (`"verified": true`); for every other profile the window shows a compatibility warning next to its title until you calibrate it; the other laptops are laid out from photos and need
 `dockwatch calibrate` once. *Draft* profiles are made from spec sheets and not verified on real hardware; they are only selectable manually in the menu until someone confirms them.
 
 Docks are detected by the VID:PID of their internal USB hubs, laptops by DMI; both can be chosen manually in the menu.
