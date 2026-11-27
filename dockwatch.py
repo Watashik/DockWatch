@@ -1276,8 +1276,7 @@ def qt_app(mode):
             if not load_config().get("animations", True):
                 return False
             now = time.monotonic()
-            fans = (self.s.get("sensors") or {}).get("fans") or []
-            return any(now - t < 0.8 for t in self.lit.values()) or any(fans)
+            return any(now - t < 0.8 for t in self.lit.values())
 
         def connector(self, q, kind, c, busy, k=1.0, pid=None):
             fade = 1.0
@@ -1415,15 +1414,6 @@ def qt_app(mode):
                 x = x0
                 while x < x1 - 10:
                     q.drawRoundedRect(QRectF(x, r.center().y() - 12, 10, 24), 2, 2); x += 19
-                rpm = max(sn.get("fans") or [0])
-                if rpm:  # маленький вращающийся вентилятор у подписи, скорость — от реальных оборотов
-                    fc = QPointF(x0 + 6, r.bottom() + 27)
-                    q.save(); q.translate(fc); q.rotate(self.fan_angle)
-                    q.setPen(Qt.NoPen); q.setBrush(DIM)
-                    for i in range(4):
-                        q.rotate(90); q.drawEllipse(QRectF(-2.2, -7, 4.4, 7))
-                    q.setBrush(BODY); q.drawEllipse(QPointF(0, 0), 1.8, 1.8)
-                    q.restore()
                 lines = sensors_lines(sn)
                 if lines:  # подпись под решёткой, сама решётка остаётся открытой
                     f = font(11)
@@ -1928,10 +1918,6 @@ def qt_app(mode):
 
     def anim_tick():
         if view.isVisible() and view.animating():
-            now = time.monotonic()
-            rpm = max((view.s.get("sensors") or {}).get("fans") or [0])
-            view.fan_angle = (view.fan_angle + rpm / 60 * 360 * (now - view.anim_t) * 0.04) % 360
-            view.anim_t = now
             view.update()
         else:
             view.anim_t = time.monotonic()
