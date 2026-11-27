@@ -93,7 +93,7 @@
       "id": "r_sd",
       "kind": "sdslot",
       "g": "right",
-      "x": 0.1,
+      "x": 0.33,
       "mark": "SD",
       "label": "@card",
       "role": "card"
@@ -102,7 +102,7 @@
       "id": "r_usbc",
       "kind": "usbc",
       "g": "right",
-      "x": 0.26,
+      "x": 0.44,
       "mark": "⇆",
       "label": "USB-C"
     },
@@ -110,7 +110,7 @@
       "id": "r_usb",
       "kind": "usb",
       "g": "right",
-      "x": 0.41,
+      "x": 0.55,
       "mark": "SS⚡",
       "label": "USB ⚡"
     },
@@ -118,7 +118,7 @@
       "id": "r_hdmi",
       "kind": "hdmi",
       "g": "right",
-      "x": 0.56,
+      "x": 0.66,
       "mark": "HDMI",
       "label": "HDMI",
       "video": true,
@@ -130,16 +130,16 @@
       "id": "r_dock",
       "kind": "sidedock",
       "g": "right",
-      "x": 0.74,
+      "x": 0.81,
       "mark": "⇆",
       "label": "@dock",
       "role": "dock"
     },
     {
       "id": "r_power",
-      "kind": "barrel",
+      "kind": "barrel_dot",
       "g": "right",
-      "x": 0.92,
+      "x": 0.95,
       "mark": "⎓",
       "label": "@power",
       "role": "power"

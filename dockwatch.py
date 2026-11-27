@@ -1181,7 +1181,7 @@ def tui():
         prev, log = None, []
         glyph = {"usb": "▭", "usbc": "⊂⊃", "vga": "▽", "dp": "◺", "hdmi": "⬡", "dc": "▣", "rj45": "⊞",
                  "audio": "◉", "card": "▬", "dockport": "⊂▭⊃", "barrel": "◎", "sidedock": "▮", "smartcard": "▬",
-                 "sim": "|", "lock": "🔒", "sdslot": "▬", "barrel_led": "◎|"}
+                 "sim": "|", "lock": "🔒", "sdslot": "▬", "barrel_led": "◎|", "barrel_dot": "·◎"}
         while True:
             s = snapshot()
             for e in diff(prev, s):
@@ -1423,12 +1423,12 @@ def qt_app(mode):
                 q.setPen(Qt.NoPen); q.setBrush(HOLE); q.drawEllipse(QPointF(-15, -6), 1.6, 1.6)
                 path.addRoundedRect(QRectF(-22, 3, 44, 5), 2, 2)
                 inner.addRect(QRectF(-18, 4.6, 36, 1.8))
-            elif kind in ("barrel", "barrel_led"):  # круглый разъём питания (у дока HP — с лампочкой сбоку)
+            elif kind in ("barrel", "barrel_led", "barrel_dot"):  # круглый разъём питания (с лампочкой сбоку/точкой)
                 path.addEllipse(QPointF(0, 0), 8, 8); inner.addEllipse(QPointF(0, 0), 2.6, 2.6)
             elif kind == "sdslot":  # тонкий слот карты памяти
                 path.addRoundedRect(QRectF(-16, -2.5, 32, 5), 2, 2); inner.addRect(QRectF(-12, -0.8, 24, 1.6))
-            elif kind == "sidedock":  # высокий боковой разъём дока (HP)
-                path.addRoundedRect(QRectF(-6, -15, 12, 30), 3, 3); inner.addRect(QRectF(-2, -11, 4, 22))
+            elif kind == "sidedock":  # длинный боковой разъём дока (HP) — вытянут вдоль боковины
+                path.addRoundedRect(QRectF(-34, -6, 68, 12), 3, 3); inner.addRect(QRectF(-30, -1.6, 60, 3.2))
             elif kind == "smartcard":
                 path.addRoundedRect(QRectF(-30, -2.5, 60, 5), 2, 2); inner.addRect(QRectF(-26, -0.8, 52, 1.6))
             elif kind == "sim":
@@ -1452,6 +1452,8 @@ def qt_app(mode):
                 for sx in (-34, 34):
                     q.setBrush(METAL); q.setPen(QPen(QColor("#555"), 1)); q.drawEllipse(QPointF(sx, 0), 5, 5)
                     q.setBrush(HOLE); q.drawEllipse(QPointF(sx, 0), 2, 2)
+            if kind == "barrel_dot":  # точка-индикатор зарядки рядом с разъёмом
+                q.setPen(Qt.NoPen); q.setBrush(QColor("#f6f6f6") if busy else LED_OFF); q.drawEllipse(QPointF(-15, 0), 2, 2)
             if kind == "barrel_led":  # вертикальная лампочка справа от разъёма: горит, когда док под питанием
                 led = QRectF(14, -9, 3.5, 18)
                 if busy:
