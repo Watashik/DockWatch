@@ -1,0 +1,25 @@
+{
+  "id": "lenovo-thinkpad-pro-dock-40ah",
+  "name": "ThinkPad Pro Dock (40AH) — draft",
+  "draft": true,
+  "note": "Layout from a photo. USB hub IDs unknown: choose the dock manually in the menu, run calibration, send `dockwatch report` with the dock attached to enable auto-detection.",
+  "match": {"usb_hubs": []},
+  "usb_hubs": {},
+  "groups": [
+    {"id": "dock", "row": 0, "w": 1.0, "height": 96, "tower": true,
+     "title": {"uk": "ThinkPad Pro Dock · задня панель", "ru": "ThinkPad Pro Dock · задняя панель", "en": "ThinkPad Pro Dock · rear panel"}}
+  ],
+  "ports": [
+    {"id": "audio", "kind": "audio", "g": "dock", "x": 0.294, "mark": "🎧", "label": "@audio", "role": "jack"},
+    {"id": "power", "kind": "dc", "g": "dock", "x": 0.348, "mark": "⎓", "label": "@power", "role": "power"},
+    {"id": "dp1", "kind": "dp", "g": "dock", "x": 0.425, "mark": "D▸", "label": "DP 1", "video": true},
+    {"id": "dp2", "kind": "dp", "g": "dock", "x": 0.510, "mark": "D▸", "label": "DP 2", "video": true},
+    {"id": "usb1", "kind": "usb", "g": "dock", "x": 0.589, "mark": "SS⚡", "label": "USB ⚡"},
+    {"id": "usb2", "kind": "usb", "g": "dock", "x": 0.665, "mark": "SS", "label": "USB 2"},
+    {"id": "usb3", "kind": "usb", "g": "dock", "x": 0.723, "mark": "SS", "label": "USB 3"},
+    {"id": "usb4", "kind": "usb", "g": "dock", "x": 0.782, "mark": "SS", "label": "USB 4"},
+    {"id": "usb5", "kind": "usb", "g": "dock", "x": 0.841, "mark": "SS", "label": "USB 5"},
+    {"id": "usbc", "kind": "usbc", "g": "dock", "x": 0.895, "mark": "⇆", "label": "USB-C"},
+    {"id": "eth", "kind": "rj45", "g": "dock", "x": 0.952, "mark": "⊞", "label": "LAN", "role": "eth"}
+  ]
+}
