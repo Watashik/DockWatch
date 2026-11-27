@@ -751,7 +751,11 @@ def media_state():
         if name.endswith(".monitor") or o.get("corked"):
             continue  # слушают выход (визуализаторы), а не микрофон, или стоят на паузе
         pr = o.get("properties", {})
-        m["mic_users"].append(pr.get("application.name") or pr.get("application.process.binary") or pr.get("media.name") or "?")
+        binary = pr.get("application.process.binary", "")
+        if binary in ("plasmashell", "pavucontrol", "pavucontrol-qt", "gnome-shell", "kmix") or \
+                "peak" in pr.get("media.name", "").lower() or pr.get("stream.monitor") == "true":
+            continue  # индикаторы уровня громкости в панели — не «запись»
+        m["mic_users"].append(pr.get("application.name") or binary or pr.get("media.name") or "?")
     kb = next(iter(glob.glob("/sys/class/leds/*kbd_backlight")), None)
     m["kbd"] = int(rd(f"{kb}/brightness", "0") or 0) if kb else None
     m["kbd_max"] = int(rd(f"{kb}/max_brightness", "0") or 0) if kb else 0
