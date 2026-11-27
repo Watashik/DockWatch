@@ -11,8 +11,10 @@
     {"id": "bezel", "row": -1, "w": 1.0, "height": 56, "bezel": true,
      "title": {"uk": "IdeaPad · рамка екрана", "ru": "IdeaPad · рамка экрана", "en": "IdeaPad · display bezel"}},
     {"id": "left", "row": 1, "w": 0.5, "height": 62, "vents": [0.03, 0.3],
+     "sensors": {"temps": ["CPU"], "fans": [0]},
      "title": {"uk": "IdeaPad Gaming 3 · лівий бік", "ru": "IdeaPad Gaming 3 · левый бок", "en": "IdeaPad Gaming 3 · left side"}},
     {"id": "right", "row": 1, "w": 0.5, "height": 62, "vents": [0.72, 0.97],
+     "sensors": {"temps": ["dGPU", "SSD"], "fans": [1]},
      "title": {"uk": "правий бік", "ru": "правый бок", "en": "right side"}}
   ],
   "ports": [

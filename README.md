@@ -8,8 +8,6 @@ what is plugged into each one, how much power and bandwidth it takes, and pops u
 | IBM theme | Light theme |
 |---|---|
 | ![IBM](docs/theme-ibm.png) | ![Light](docs/theme-light.png) |
-| **HP EliteBook + UltraSlim Dock** | **Acer Nitro V 15** |
-| ![HP](docs/theme-hp.png) | ![Nitro](docs/theme-nitro.png) |
 
 Screenshots in other languages: [українська](docs/screenshot-uk.png) · [русский](docs/screenshot-ru.png)
 
@@ -31,7 +29,7 @@ Screenshots in other languages: [українська](docs/screenshot-uk.png) �
 - A USB-C that is also the dock connector is shown as USB-C when undocked and as the dock when docked.
 - **Settings window**: language, theme, scale, sound, animations, options; rename ports; give your own names to devices
   (recognised by serial number — right-click a port → *Rename device*).
-- **Themes** (auto-picked by laptop): ThinkPad (black, red), HP (aluminium, HP blue, EliteBook wordmark), Acer Nitro (black, blue-violet gradient), IBM (red/green/blue accents and the striped IBM logo), Light (white ports and keys).
+- **Themes**: ThinkPad (black, red), IBM (red/green/blue accents and the striped IBM logo), Light (white ports and keys).
 - Smooth glow when a port lights up, a fan icon spinning at the real RPM, a short chime on plug/unplug (can be turned off).
 - **Plasma 6 panel widget**: dock icon with the number of busy ports, click for the list (installed by `install.sh`;
   right-click the panel → Add Widgets → DockWatch).
@@ -62,12 +60,6 @@ sudo dnf install python3-pyside6 pulseaudio-utils udisks2 bluez
 # KDE Plasma: the tray icon and the panel widget work out of the box.
 # GNOME: install the "AppIndicator and KStatusNotifierItem Support" extension for the tray icon.
 ```
-Debian 13 / Ubuntu:
-```sh
-sudo apt install python3-pyside6.qtwidgets python3-pyside6.qtsvg python3-pyside6.qtnetwork pulseaudio-utils udisks2
-# GNOME: sudo apt install gnome-shell-extension-appindicator  (tray icon), then log out and in
-```
-
 On Fedora regular users are not in the `users` group, so for the lid-dot blink also run `sudo usermod -aG users $USER`.
 
 Requirements: Python 3, PySide6 (`sudo pacman -S pyside6`). Optional: udisks2, pactl (PipeWire/PulseAudio),
@@ -79,38 +71,22 @@ NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-l
 | Dock | Lenovo ThinkPad Ultra Docking Station (40AJ) | `profiles/docks/lenovo-thinkpad-ultra-dock-40aj.json` |
 | Dock (draft) | Lenovo ThinkPad USB-C Dock Gen 2 (40AS) | `profiles/docks/lenovo-thinkpad-usb-c-dock-gen2-40as.json` |
 | Dock (draft) | Dell WD19 | `profiles/docks/dell-wd19.json` |
-| Dock | HP UltraSlim Docking Station (2013) — choose in the menu | `profiles/docks/hp-ultraslim-dock-2013.json` |
-| Laptop | Acer Nitro V 15 (ANV15-51) | `profiles/laptops/acer-nitro-v15-anv15-51.json` |
-| Laptop | Lenovo IdeaPad Gaming 3 15ACH6 | `profiles/laptops/lenovo-ideapad-gaming-3-15ach6.json` |
-| Laptop | Pixus Rise | `profiles/laptops/pixus-rise.json` |
-| Laptop | HP EliteBook Folio 1040 G3 | `profiles/laptops/hp-elitebook-folio-1040-g3.json` |
 | Laptop | Lenovo ThinkPad L14 Gen 1 | `profiles/laptops/lenovo-thinkpad-l14-gen1.json` |
 
 *Draft* profiles are made from spec sheets and not verified on real hardware; they are only selectable manually in the menu until someone confirms them.
 
 Docks are detected by the VID:PID of their internal USB hubs, laptops by DMI; both can be chosen manually in the menu.
 
-### Any laptop without a profile
-If there is no profile for your laptop, DockWatch builds one on the fly from what Linux sees: USB-A / USB-C ports
-(already bound, USB 2 and USB 3 of one connector merged), HDMI, Ethernet, audio jack, card reader, camera. Ports are spread
-evenly over the two sides, side widths follow the number of ports, and the theme and wordmark follow the brand
-(ThinkPad, Legion, IdeaPad/Yoga, ROG/TUF, ZenBook/VivoBook, XPS/Latitude, Alienware, EliteBook/OMEN, Nitro/Predator/Aspire,
-MSI, Framework, Razer, Galaxy Book, MateBook, RedmiBook, AORUS…). The order of ports may differ from the real one —
-`dockwatch make-profile` saves this layout as a JSON template: fix it by a photo and send it as a PR.
-
 ### Adding your dock or laptop
 Profiles are plain JSON — copy an existing one:
 - `match` — detection: `usb_hubs` (VID:PID of the dock's hubs, see `lsusb`) or `dmi` (substring of `/sys/class/dmi/id/product_version`).
-- `groups` — physical sides; `row` + `w` put several on one line; `vents` draws a grille with sensors; `bezel` enables the camera/mic header.
+- `groups` — physical sides; `row` + `w` put several on one line; `vents` draws a grille with sensors (`"sensors": {"temps": ["CPU"], "fans": [0]}` gives each grille its own — e.g. CPU on the left, `dGPU`/SSD on the right); `bezel` enables the camera/mic header.
 - `ports` — connectors left→right: `kind` (`usb`, `usbc`, `hdmi`, `dp`, `vga`, `rj45`, `audio`, `dc`, `card`, `dockport`),
   `x` — centre as a fraction of the side width, `label`, optional `role` (`power`, `eth`, `dock`, `card`, `jack`),
   `label_docked`, `typec` (e.g. `port0`) and `drm` (e.g. `["HDMI-A-1"]`).
 
 Check it with `python tools/check_profiles.py` (also run by GitHub Actions on every push), then run `dockwatch calibrate` once. New profiles are welcome — open an issue with the **New dock / laptop profile** form
 (photo of the ports + `lsusb`).
-
-## Plugins
-Extra modules can be dropped into `~/.local/share/dockwatch/plugins/*.py`. A plugin may define `TR` (translations), `CLI` (extra command-line modes), `on_start(ctx)`, `on_tick(state, events, ctx)` and `menu(add, ctx)`; the DockWatch module is available as `dw`.
 
 ## Config
 `~/.config/dockwatch/config.json` — port bindings, custom labels, language, chosen profiles, options.

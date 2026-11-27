@@ -1102,6 +1102,18 @@ def sensors():
     return {"temps": temps, "fans": fans}
 
 
+def sensors_pick(sn, spec):
+    """Датчики для одной решётки: spec из группы профиля {"temps": ["CPU"], "fans": [0]}
+    (или просто список температур). Нет spec — все датчики. dGPU показывается как GPU."""
+    if spec is None:
+        return sn
+    if isinstance(spec, list):
+        spec = {"temps": spec}
+    temps = {("GPU" if k == "dGPU" else k): v for k, v in sn["temps"].items() if k in spec.get("temps", [])}
+    fans = [f for i, f in enumerate(sn["fans"]) if i in spec.get("fans", [])]
+    return {"temps": temps, "fans": fans}
+
+
 def sensors_lines(sn):
     order = sorted(sn["temps"].items(), key=lambda kv: ("CPU", "GPU", "SSD").index(kv[0]) if kv[0] in ("CPU", "GPU", "SSD") else 9)
     temps = ("🌡 " + " · ".join(f"{k} {v:.0f}°C" for k, v in order)) if order else ""
@@ -1868,6 +1880,8 @@ def qt_app(mode):
             if g.get("vents"):
                 a, b = g["vents"]
                 sn = self.s.get("sensors", {"temps": {}, "fans": []})
+                if self.sensor_split:  # у каждой решётки свои датчики (что под ней стоит)
+                    sn = sensors_pick(sn, g.get("sensors", {}))
                 hot = max(sn["temps"].values(), default=0)
                 k = min(1.0, max(0.0, (hot - 45) / 45))  # 45°C — тёмная, 90°C — раскалённая
                 h0 = HOLE if BGC.lightness() > 150 else QColor(7, 7, 7)  # на светлой теме решётка светлая
@@ -1881,8 +1895,8 @@ def qt_app(mode):
                 x = x0
                 while x < x1 - 10:
                     q.drawRoundedRect(QRectF(x, r.center().y() - 12, 10, 24), 2, 2); x += 19
-                lines = sensors_lines(sn) if g["id"] == self.sensor_group else []
-                if lines:  # подпись под решёткой (только под одной из решёток), сама решётка остаётся открытой
+                lines = sensors_lines(sn) if (self.sensor_split or g["id"] == self.sensor_group) else []
+                if lines:  # подпись под решёткой (своя у каждой или одна общая), сама решётка остаётся открытой
                     f = font(11)
                     fm = QFontMetricsF(f)
                     q.setFont(f)
@@ -1999,6 +2013,7 @@ def qt_app(mode):
             self.grects = {}
             vg = [g["id"] for g in self.s["groups"] if g.get("vents")]
             self.sensor_group = vg[-1] if vg else None
+            self.sensor_split = any(g.get("sensors") for g in self.s["groups"] if g.get("vents"))
             y = 98
             # корпуса во всю ширину, но тонкие (по высоте — впритык к разъёмам); на широком окне разъёмы крупнее
             CW, off = W, 0.0
