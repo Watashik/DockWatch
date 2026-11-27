@@ -60,7 +60,7 @@
       "id": "l_usb",
       "kind": "usb",
       "g": "left",
-      "x": 0.5,
+      "x": 0.48,
       "mark": "SS",
       "label": "USB"
     },
@@ -68,7 +68,7 @@
       "id": "l_audio",
       "kind": "audio",
       "g": "left",
-      "x": 0.63,
+      "x": 0.6,
       "mark": "🎧",
       "label": "@audio",
       "role": "jack"
@@ -77,7 +77,7 @@
       "id": "l_sc",
       "kind": "smartcard",
       "g": "left",
-      "x": 0.84,
+      "x": 0.83,
       "mark": "SC",
       "label": "Smart Card"
     },
