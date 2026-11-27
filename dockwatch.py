@@ -368,11 +368,22 @@ def dock_roots(devs, dock):
 
 
 def port_key(name, devs, roots, dock):
+    """Ключ порта: путь через встроенные хабы дока до порта, в который воткнуто устройство
+    (внутри дока бывают вложенные хабы: 1-1 → 1-1.2 → 1-1.2.3). Чужой разветвитель — по его порту."""
+    hub_ids = set((dock or {}).get("usb_hubs", {}))
     for r in roots:
         if name.startswith(r + "."):
             d = devs[r]
             tag = "dock3" if (dock or {}).get("usb_hubs", {}).get(f"{d['vid']}:{d['pid']}") == "usb3" else "dock2"
-            return tag + "." + name[len(r) + 1:].split(".")[0], True
+            segs = name[len(r) + 1:].split(".")
+            depth = 1
+            for i in range(1, len(segs)):  # спускаемся, пока предок — хаб самого дока
+                anc = r + "." + ".".join(segs[:i])
+                if anc in devs and f"{devs[anc]['vid']}:{devs[anc]['pid']}" in hub_ids:
+                    depth = i + 1
+                else:
+                    break
+            return tag + "." + ".".join(segs[:depth]), True
     return "lap:" + name.split(".")[0], False
 
 
@@ -383,6 +394,8 @@ def scan_usb(dock, devs=None):
     for n, d in devs.items():
         if n.startswith("usb") or f"{d['vid']}:{d['pid']}" in hub_ids:
             continue
+        if "11" in (d["cls"], d["ifcls"]) or f"{d['vid']}:{d['pid']}" in set((dock or {}).get("internal_usb", [])):
+            continue  # служебные устройства: Billboard (USB-C), встроенная звуковая карта дока
         key, on_dock = port_key(n, devs, roots, dock)
         top = n.split(".")[0]
         if not on_dock and devs.get(top, {}).get("removable") == "fixed":
@@ -681,9 +694,10 @@ def typec_power():
     for p in sorted(glob.glob("/sys/class/power_supply/ucsi-*")):
         if rd(f"{p}/online") != "1":
             continue
-        v, a = rd(f"{p}/voltage_now"), rd(f"{p}/current_now") or rd(f"{p}/current_max")
-        if v and a:
-            out.append(f"USB-C {int(v) / 1e6:.0f} V × {int(a) / 1e6:.1f} A = {int(v) * int(a) / 1e12:.0f} W")
+        # voltage_now у многих ThinkPad (UCSI) «застывает» на 5 В — честнее показать согласованный максимум блока
+        vm, am = rd(f"{p}/voltage_max"), rd(f"{p}/current_max")
+        if vm and am and int(vm) and int(am):
+            out.append(f"USB-C PD ≤ {int(vm) * int(am) / 1e12:.0f} W ({int(vm) / 1e6:.0f} V × {int(am) / 1e6:.2f} A)")
     return out
 
 
@@ -700,7 +714,9 @@ def typec_info(port):
     volt = int(rd(f"{psy}/voltage_now", "0") or 0) if psy else 0
     if role and role.group(1) == "source":
         return tr("pd_source", mode=mode or "USB-C", a=f"{cur / 1e6:.1f}" if cur else "?")
-    w = f"{volt * cur / 1e12:.0f} W" if volt and cur else ""
+    vmax = int(rd(f"{psy}/voltage_max", "0") or 0) if psy else 0
+    cmax = int(rd(f"{psy}/current_max", "0") or 0) if psy else 0
+    w = f"≤ {vmax * cmax / 1e12:.0f} W" if vmax and cmax else (f"{volt * cur / 1e12:.0f} W" if volt > 5_000_000 and cur else "")
     return tr("pd_sink", mode=mode or "USB-C", w=w).rstrip(" ·")
 
 

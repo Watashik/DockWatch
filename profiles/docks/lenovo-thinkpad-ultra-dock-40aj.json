@@ -1,25 +1,150 @@
 {
   "id": "lenovo-thinkpad-ultra-dock-40aj",
   "name": "ThinkPad Ultra Dock (40AJ)",
-  "match": {"usb_hubs": [["17ef", "3070"], ["17ef", "3071"]]},
-  "usb_hubs": {"17ef:3070": "usb3", "17ef:3071": "usb2"},
+  "match": {
+    "usb_hubs": [
+      [
+        "17ef",
+        "3070"
+      ],
+      [
+        "17ef",
+        "3071"
+      ]
+    ]
+  },
+  "usb_hubs": {
+    "17ef:3070": "usb3",
+    "17ef:3071": "usb2"
+  },
   "groups": [
-    {"id": "dock", "row": 0, "w": 1.0, "height": 96, "tower": true,
-     "title": {"uk": "ThinkPad Ultra Dock · задня панель", "ru": "ThinkPad Ultra Dock · задняя панель", "en": "ThinkPad Ultra Dock · rear panel"}}
+    {
+      "id": "dock",
+      "row": 0,
+      "w": 1.0,
+      "height": 96,
+      "tower": true,
+      "title": {
+        "uk": "ThinkPad Ultra Dock · задня панель",
+        "ru": "ThinkPad Ultra Dock · задняя панель",
+        "en": "ThinkPad Ultra Dock · rear panel"
+      }
+    }
   ],
   "ports": [
-    {"id": "audio", "kind": "audio", "g": "dock", "x": 0.063, "mark": "🎧", "label": "@audio"},
-    {"id": "vga", "kind": "vga", "g": "dock", "x": 0.153, "mark": "▭", "label": "VGA", "video": true},
-    {"id": "dp1", "kind": "dp", "g": "dock", "x": 0.265, "mark": "D▸", "label": "DP 1", "video": true},
-    {"id": "dp2", "kind": "dp", "g": "dock", "x": 0.347, "mark": "D▸", "label": "DP 2", "video": true},
-    {"id": "hdmi", "kind": "hdmi", "g": "dock", "x": 0.429, "mark": "HDMI", "label": "HDMI", "video": true},
-    {"id": "power", "kind": "dc", "g": "dock", "x": 0.503, "mark": "⎓", "label": "@power", "role": "power"},
-    {"id": "usb1", "kind": "usb", "g": "dock", "x": 0.588, "mark": "SS⚡", "label": "USB ⚡"},
-    {"id": "usb2", "kind": "usb", "g": "dock", "x": 0.672, "mark": "SS", "label": "USB 2"},
-    {"id": "usb3", "kind": "usb", "g": "dock", "x": 0.734, "mark": "SS", "label": "USB 3"},
-    {"id": "usb4", "kind": "usb", "g": "dock", "x": 0.796, "mark": "SS", "label": "USB 4"},
-    {"id": "usbc1", "kind": "usbc", "g": "dock", "x": 0.850, "mark": "⇆", "label": "USB-C"},
-    {"id": "usbc2", "kind": "usbc", "g": "dock", "x": 0.899, "mark": "⇆", "label": "USB-C"},
-    {"id": "eth", "kind": "rj45", "g": "dock", "x": 0.962, "mark": "⊞", "label": "LAN", "role": "eth"}
+    {
+      "id": "audio",
+      "kind": "audio",
+      "g": "dock",
+      "x": 0.063,
+      "mark": "🎧",
+      "label": "@audio"
+    },
+    {
+      "id": "vga",
+      "kind": "vga",
+      "g": "dock",
+      "x": 0.153,
+      "mark": "▭",
+      "label": "VGA",
+      "video": true
+    },
+    {
+      "id": "dp1",
+      "kind": "dp",
+      "g": "dock",
+      "x": 0.265,
+      "mark": "D▸",
+      "label": "DP 1",
+      "video": true
+    },
+    {
+      "id": "dp2",
+      "kind": "dp",
+      "g": "dock",
+      "x": 0.347,
+      "mark": "D▸",
+      "label": "DP 2",
+      "video": true
+    },
+    {
+      "id": "hdmi",
+      "kind": "hdmi",
+      "g": "dock",
+      "x": 0.429,
+      "mark": "HDMI",
+      "label": "HDMI",
+      "video": true
+    },
+    {
+      "id": "power",
+      "kind": "dc",
+      "g": "dock",
+      "x": 0.503,
+      "mark": "⎓",
+      "label": "@power",
+      "role": "power"
+    },
+    {
+      "id": "usb1",
+      "kind": "usb",
+      "g": "dock",
+      "x": 0.588,
+      "mark": "SS⚡",
+      "label": "USB ⚡"
+    },
+    {
+      "id": "usb2",
+      "kind": "usb",
+      "g": "dock",
+      "x": 0.672,
+      "mark": "SS",
+      "label": "USB 2"
+    },
+    {
+      "id": "usb3",
+      "kind": "usb",
+      "g": "dock",
+      "x": 0.734,
+      "mark": "SS",
+      "label": "USB 3"
+    },
+    {
+      "id": "usb4",
+      "kind": "usb",
+      "g": "dock",
+      "x": 0.796,
+      "mark": "SS",
+      "label": "USB 4"
+    },
+    {
+      "id": "usbc1",
+      "kind": "usbc",
+      "g": "dock",
+      "x": 0.85,
+      "mark": "⇆",
+      "label": "USB-C"
+    },
+    {
+      "id": "usbc2",
+      "kind": "usbc",
+      "g": "dock",
+      "x": 0.899,
+      "mark": "⇆",
+      "label": "USB-C"
+    },
+    {
+      "id": "eth",
+      "kind": "rj45",
+      "g": "dock",
+      "x": 0.962,
+      "mark": "⊞",
+      "label": "LAN",
+      "role": "eth"
+    }
+  ],
+  "internal_usb": [
+    "17ef:306f",
+    "17ef:3075"
   ]
 }

@@ -55,7 +55,12 @@
       "mark": "⎓",
       "label": "USB-C ⚡",
       "role": "power",
-      "typec": "port1"
+      "typec": "port1",
+      "label_docked": {
+        "uk": "Док ⚡",
+        "ru": "Док ⚡",
+        "en": "Dock ⚡"
+      }
     },
     {
       "id": "l_dock",
