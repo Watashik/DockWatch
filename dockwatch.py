@@ -98,6 +98,11 @@ TR = {
     "not_found": {"uk": "не визначено", "ru": "не определено", "en": "not detected"},
     "no_dock": {"uk": "Без дока", "ru": "Без дока", "en": "No dock"},
     "per_s": {"uk": "/с", "ru": "/с", "en": "/s"},
+    "mode_mtp": {"uk": "передача файлів (MTP)", "ru": "передача файлов (MTP)", "en": "file transfer (MTP)"},
+    "mode_ptp": {"uk": "передача фото (PTP)", "ru": "передача фото (PTP)", "en": "photo transfer (PTP)"},
+    "mode_adb": {"uk": "налагодження (ADB)", "ru": "отладка (ADB)", "en": "debugging (ADB)"},
+    "mode_tether": {"uk": "USB-модем", "ru": "USB-модем", "en": "USB tethering"},
+    "mode_midi": {"uk": "MIDI", "ru": "MIDI", "en": "MIDI"},
     "pd_source": {"uk": "🔌 віддає живлення · {mode} · до {a} A", "ru": "🔌 отдаёт питание · {mode} · до {a} A",
                   "en": "🔌 supplying power · {mode} · up to {a} A"},
     "pd_sink": {"uk": "🔌 заряджається · {mode} · {w}", "ru": "🔌 заряжается · {mode} · {w}", "en": "🔌 charging · {mode} · {w}"},
@@ -184,11 +189,13 @@ def usb_devices():
         if ":" in name or not os.path.exists(os.path.join(p, "idVendor")):
             continue
         ifc = glob.glob(f"{p}/{name}:1.0/bInterfaceClass")
+        ifaces = [(rd(f"{i}/bInterfaceClass"), rd(f"{i}/bInterfaceSubClass"), rd(f"{i}/bInterfaceProtocol"), rd(f"{i}/interface"))
+                  for i in sorted(glob.glob(f"{p}/{name}:*"))]
         devs[name] = {
             "name": name, "vid": rd(f"{p}/idVendor"), "pid": rd(f"{p}/idProduct"),
             "product": rd(f"{p}/product"), "maker": rd(f"{p}/manufacturer"),
             "speed": rd(f"{p}/speed"), "cls": rd(f"{p}/bDeviceClass"),
-            "ifcls": rd(ifc[0]) if ifc else "", "removable": rd(f"{p}/removable"),
+            "ifcls": rd(ifc[0]) if ifc else "", "removable": rd(f"{p}/removable"), "ifaces": ifaces,
         }
     return devs
 
@@ -248,7 +255,27 @@ USB_CLASS = {"01": "🔊", "02": "📡", "03": "⌨️", "06": "📷", "07": "�
 VENDOR_ICON = {"045e": "🎮", "057e": "🎮", "054c": "🎮", "28de": "🎮"}
 
 
+def phone_modes(d):
+    """Режимы телефона по интерфейсам: MTP/PTP/ADB/модем/MIDI."""
+    modes = []
+    for cls, sub, proto, name in d.get("ifaces", []):
+        n = name.upper()
+        if "MTP" in n:
+            modes.append("mode_mtp")
+        elif cls == "06" or "PTP" in n:
+            modes.append("mode_ptp")
+        elif (cls, sub, proto) == ("ff", "42", "01"):
+            modes.append("mode_adb")
+        elif (cls, sub, proto) in (("e0", "01", "03"), ("ef", "04", "01")) or (cls == "02" and sub in ("02", "0d", "06")):
+            modes.append("mode_tether")
+        elif cls == "01" and sub == "03":
+            modes.append("mode_midi")
+    return list(dict.fromkeys(modes))
+
+
 def usb_icon(d):
+    if {"mode_mtp", "mode_adb", "mode_tether"} & set(phone_modes(d)):
+        return "📱"
     if d["vid"] in VENDOR_ICON:
         return VENDOR_ICON[d["vid"]]
     cls = d["cls"] if d["cls"] not in ("00", "ef") else d["ifcls"]
@@ -458,7 +485,13 @@ def snapshot(cfg=None):
         return next((pid for pid, p in ports.items() if p.get("role") == role and p["owner"] == owner), None)
 
     for d in usb:
-        item = f"{usb_icon(d)} {d['product'] or d['maker'] or d['vid'] + ':' + d['pid']}"
+        nm = d["product"] or d["maker"] or d["vid"] + ":" + d["pid"]
+        if d["maker"] and d["product"] and d["maker"].split()[0].lower() not in d["product"].lower() and len(d["maker"]) < 16:
+            nm = f"{d['maker']} {d['product']}"
+        item = f"{usb_icon(d)} {nm}"
+        modes = phone_modes(d)
+        if modes:
+            item += " · " + " + ".join(tr(m) for m in modes)
         if speed_text(d["speed"]):
             item += f" · {speed_text(d['speed'])}"
         stat = usb_stats(d["name"]) if show else ""
