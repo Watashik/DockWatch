@@ -1,0 +1,70 @@
+name: New dock / laptop profile
+description: Ask for support of a docking station or laptop that DockWatch doesn't know yet
+title: "[profile] "
+labels: ["profile"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! With this info we can write a profile for your hardware.
+        You can write in any language — English is not required.
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: Exact model name and, if you know it, the type/part number.
+      placeholder: "Lenovo ThinkPad Ultra Docking Station 40AJ"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type
+      options:
+        - Dock
+        - Laptop
+    validations:
+      required: true
+  - type: textarea
+    id: photos
+    attributes:
+      label: Photos of the ports
+      description: Every side that has connectors, so the ports are clearly visible. Drag and drop images here.
+    validations:
+      required: true
+  - type: textarea
+    id: order
+    attributes:
+      label: Ports from left to right
+      description: For each side, list the connectors left → right (e.g. "Rear: DC, RJ45, USB-A, USB-A, HDMI, DP, DP").
+    validations:
+      required: true
+  - type: textarea
+    id: lsusb
+    attributes:
+      label: Output of `lsusb`
+      description: For a dock, run it with the dock connected.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: lsusb_t
+    attributes:
+      label: Output of `lsusb -t`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: dmi
+    attributes:
+      label: Output of `cat /sys/class/dmi/id/product_version`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Distro, desktop, what works or doesn't.
+    validations:
+      required: false

@@ -27,5 +27,10 @@ touch ~/.local/share/icons/hicolor
 cp data/dockwatch.desktop ~/.local/share/applications/dockwatch.desktop
 command -v update-desktop-database >/dev/null && update-desktop-database ~/.local/share/applications || true
 command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
+if [ "$1" = "--autostart" ]; then
+  mkdir -p ~/.config/autostart
+  printf '[Desktop Entry]\nType=Application\nName=DockWatch\nExec=dockwatch tray\nIcon=dockwatch\n' > ~/.config/autostart/dockwatch.desktop
+  echo "autostart enabled"
+fi
 echo "dockwatch installed: run 'dockwatch' or find DockWatch in the app menu."
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "Add ~/.local/bin to PATH.";; esac

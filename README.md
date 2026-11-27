@@ -1,22 +1,48 @@
-# dockwatch
+# DockWatch
 
-Live port map of your **docking station and laptop** — in ThinkPad style. Shows which connectors are in use,
-what is plugged in, and pops up a notification when something is connected or removed.
+Live port map of your **docking station and laptop**, in ThinkPad style. It shows which connectors are in use,
+what is plugged into each one, how much power and bandwidth it takes, and pops up a notification on plug/unplug.
 
 ![screenshot](docs/screenshot.png)
 
-**Languages:** українська · русский · English (auto from `$LANG`, switch in the tray menu or `--lang`).
+**Languages:** українська · русский · English (auto from `$LANG`; switch in the menu or with `--lang`).
+
+## Features
+- Real port layout of the dock (rear panel) and the laptop sides; connectors glow red when in use.
+- Per port: device name, USB speed, declared current, **disk read/write and network speed** with a one-minute sparkline,
+  USB-C **Power Delivery** role and current, LAN speed and traffic.
+- Phones: detects the USB mode (MTP file transfer, PTP, ADB, tethering, MIDI).
+- SD card slot, 3.5 mm jack (headphones / headset), HDMI/DP/VGA monitors (name from EDID, resolution).
+- Header: camera and microphones state (in use by which app, muted), F1/F4 mute LEDs, sound volume,
+  battery level, wear and cycles, power profile, Wi‑Fi network, connected Bluetooth devices with battery.
+- Temperatures (CPU/GPU/SSD) and fan RPM under the vent grille, which glows as the laptop heats up.
+- Right-click a port with a drive: **open** it or **safely remove** it.
+- "Don't forget your flash drive" reminder when you undock or close the lid with a drive still mounted.
+- Connection log (`~/.local/share/dockwatch/history.log`), start at login, power profile switching.
+- ThinkPad extra: blink the red dot on the lid when something is plugged in (needs a small udev rule).
+- A USB-C that is also the dock connector is shown as USB-C when undocked and as the dock when docked.
 
 ## Views
 | Command | What it does |
 |---|---|
-| `dockwatch` / `dockwatch tray` | tray icon (KDE/any SNI tray), click → port map, plug/unplug notifications |
-| `dockwatch gui` | window with the port map (scales with window size / fullscreen) |
-| `dockwatch tui` | the same in a terminal (curses) |
+| `dockwatch` | window + tray icon; closing the window keeps it in the tray, a second launch just shows the window |
+| `dockwatch tray` | start hidden in the tray (used for autostart) |
+| `dockwatch gui` | window only |
+| `dockwatch tui` | terminal version (curses) |
 | `dockwatch dump` | plain-text state |
-| `dockwatch calibrate` | bind system USB ports to physical connectors — plug a flash drive into each one |
+| `dockwatch calibrate` | bind system USB ports to physical connectors: plug a flash drive into each one |
 
-Only `/sys` is read — no root, no daemons. GUI/tray need **PySide6** (`sudo pacman -S pyside6` / `pip install PySide6`).
+## Install
+```sh
+git clone https://github.com/Watashik/DockWatch && cd DockWatch
+./install.sh               # `dockwatch` command, menu entry and icon (per user, no root)
+./install.sh --autostart   # same + start in the tray at login
+sudo ./install-root.sh     # optional: allow blinking the ThinkPad lid dot
+```
+Arch/CachyOS: an AUR `PKGBUILD` is in `packaging/aur/`.
+
+Requirements: Python 3, PySide6 (`sudo pacman -S pyside6`). Optional: udisks2, pactl (PipeWire/PulseAudio),
+NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-level tools are used — no root.
 
 ## Supported hardware
 | Type | Model | Profile |
@@ -24,21 +50,25 @@ Only `/sys` is read — no root, no daemons. GUI/tray need **PySide6** (`sudo pa
 | Dock | Lenovo ThinkPad Ultra Docking Station (40AJ) | `profiles/docks/lenovo-thinkpad-ultra-dock-40aj.json` |
 | Laptop | Lenovo ThinkPad L14 Gen 1 | `profiles/laptops/lenovo-thinkpad-l14-gen1.json` |
 
+Docks are detected by the VID:PID of their internal USB hubs, laptops by DMI; both can be chosen manually in the menu.
+
 ### Adding your dock or laptop
 Profiles are plain JSON — copy an existing one:
-- `match` — how to detect it: `usb_hubs` (VID:PID of the dock's internal hubs, see `lsusb`) or `dmi` (substring of `/sys/class/dmi/id/product_version`).
-- `groups` — physical sides (rear panel, left/right side); `row` + `w` put several on one line.
+- `match` — detection: `usb_hubs` (VID:PID of the dock's hubs, see `lsusb`) or `dmi` (substring of `/sys/class/dmi/id/product_version`).
+- `groups` — physical sides; `row` + `w` put several on one line; `vents` draws a grille with sensors; `bezel` enables the camera/mic header.
 - `ports` — connectors left→right: `kind` (`usb`, `usbc`, `hdmi`, `dp`, `vga`, `rj45`, `audio`, `dc`, `card`, `dockport`),
-  `x` — centre position as a fraction of the side's width, `label`, optional `role` (`power`, `eth`, `dock`), `label_docked` (label while docked — e.g. a USB-C that becomes the dock connector), `typec` (e.g. `port0` for USB-C Power Delivery info) and `drm` (e.g. `["HDMI-A-1"]`).
+  `x` — centre as a fraction of the side width, `label`, optional `role` (`power`, `eth`, `dock`, `card`, `jack`),
+  `label_docked`, `typec` (e.g. `port0`) and `drm` (e.g. `["HDMI-A-1"]`).
 
-Then run `dockwatch calibrate` once. Pull requests with new profiles (and a photo of the ports) are welcome.
+Then run `dockwatch calibrate` once. New profiles are welcome — open an issue with the **New dock / laptop profile** form
+(photo of the ports + `lsusb`).
 
 ## Config
-`~/.config/dockwatch/config.json` — port bindings, custom labels, language.
+`~/.config/dockwatch/config.json` — port bindings, custom labels, language, chosen profiles, options.
 
 ## Logos
 `assets/` may contain `thinkpad.png`, `lenovo.png`, `ibm.png` for the header/footer. They are trademarks of their owners
-and are **not** distributed with the project; without them the header falls back to a drawn wordmark.
+and are **not** distributed with the project; without them a drawn wordmark is used (as on the screenshot).
 
 ## License
 MIT

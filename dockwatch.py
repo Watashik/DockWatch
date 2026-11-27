@@ -124,6 +124,22 @@ TR = {
     "headset": {"uk": "🎧 гарнітура (з мікрофоном)", "ru": "🎧 гарнитура (с микрофоном)", "en": "🎧 headset (with mic)"},
     "sd_card": {"uk": "💾 картка {size}", "ru": "💾 карта {size}", "en": "💾 card {size}"},
     "off": {"uk": "вимкнено", "ru": "выключен", "en": "off"},
+    "eject": {"uk": "⏏ Безпечно вийняти", "ru": "⏏ Безопасно извлечь", "en": "⏏ Safely remove"},
+    "open_files": {"uk": "📂 Відкрити у файловому менеджері", "ru": "📂 Открыть в файловом менеджере", "en": "📂 Open in file manager"},
+    "ejected": {"uk": "⏏ {x}: можна виймати", "ru": "⏏ {x}: можно вынимать", "en": "⏏ {x}: safe to remove"},
+    "eject_fail": {"uk": "Не вдалося вийняти {x}: {e}", "ru": "Не удалось извлечь {x}: {e}", "en": "Could not remove {x}: {e}"},
+    "forgot": {"uk": "⚠️ Не забудь: ще підключено {x}", "ru": "⚠️ Не забудь: ещё подключено {x}", "en": "⚠️ Don't forget: {x} is still mounted"},
+    "m_autostart": {"uk": "Запускати при вході в систему", "ru": "Запускать при входе в систему", "en": "Start at login"},
+    "m_history": {"uk": "Журнал підключень", "ru": "Журнал подключений", "en": "Connection log"},
+    "m_lid": {"uk": "Блимати точкою на кришці при подіях", "ru": "Мигать точкой на крышке при событиях", "en": "Blink the lid dot on events"},
+    "m_lid_na": {"uk": "Точка на кришці: потрібне правило udev (install-root.sh)", "ru": "Точка на крышке: нужно правило udev (install-root.sh)",
+                 "en": "Lid dot: needs the udev rule (install-root.sh)"},
+    "m_profile": {"uk": "Профіль живлення", "ru": "Профиль питания", "en": "Power profile"},
+    "power-saver": {"uk": "Енергозбереження", "ru": "Энергосбережение", "en": "Power saver"},
+    "balanced": {"uk": "Збалансований", "ru": "Сбалансированный", "en": "Balanced"},
+    "performance": {"uk": "Продуктивність", "ru": "Производительность", "en": "Performance"},
+    "bat_health": {"uk": "знос {w}% · {c} циклів", "ru": "износ {w}% · {c} циклов", "en": "wear {w}% · {c} cycles"},
+    "bt_bat": {"uk": "{n} {b}%", "ru": "{n} {b}%", "en": "{n} {b}%"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
@@ -180,6 +196,7 @@ def load_config():
     cfg.setdefault("laptop_choice", cfg.pop("laptop", "") or "auto")  # auto | <profile id>
     cfg.setdefault("show_stats", True)
     cfg.setdefault("hide_dock", False)
+    cfg.setdefault("lid_blink", False)
     return cfg
 
 
@@ -409,10 +426,17 @@ def in_usb_path(path, name):
     return f"/{name}/" in path or path.endswith(f"/{name}")
 
 
+def usb_disks(name):
+    """Блочные устройства (sdX) этого USB-устройства."""
+    return [os.path.basename(b) for b in glob.glob("/sys/block/sd*") if in_usb_path(os.path.realpath(b), name)]
+
+
 def usb_stats(name):
-    """Что можно узнать о нагрузке USB-устройства без root: заявленный ток, диск (чтение/запись), сеть."""
+    """Что можно узнать о нагрузке USB-устройства без root: заявленный ток, диск (чтение/запись), сеть.
+    Возвращает (текст, суммарная скорость байт/с)."""
     p = f"/sys/bus/usb/devices/{name}"
     out = []
+    total = 0.0
     mp = rd(f"{p}/bMaxPower")
     if mp and mp not in ("0mA", "0"):
         out.append("⚡ " + mp.replace("mA", " mA"))
@@ -427,13 +451,150 @@ def usb_stats(name):
                 tx += rate(f"blk-w-{b}", int(f[6]) * 512)
     if disk:
         out.append(f"💾 ↓{human(rx)}{tr('per_s')} ↑{human(tx)}{tr('per_s')}")
+        total += rx + tx
     for n in glob.glob("/sys/class/net/*"):
         dev = os.path.join(n, "device")
         if os.path.exists(dev) and in_usb_path(os.path.realpath(dev), name):
             r = rate(f"net-r-{n}", int(rd(f"{n}/statistics/rx_bytes", "0") or 0))
             w = rate(f"net-w-{n}", int(rd(f"{n}/statistics/tx_bytes", "0") or 0))
             out.append(f"🌐 ↓{human(r)}{tr('per_s')} ↑{human(w)}{tr('per_s')}")
-    return " · ".join(out)
+            total += r + w
+    return " · ".join(out), total
+
+
+def disk_parts(disk):
+    """Разделы диска: [(dev, mountpoint, label)] через lsblk (без root)."""
+    try:
+        j = json.loads(subprocess.run(["lsblk", "-J", "-o", "NAME,MOUNTPOINT,LABEL,TYPE", f"/dev/{disk}"],
+                                      capture_output=True, text=True, timeout=3).stdout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+    out = []
+
+    def walk(n):
+        if n.get("type") in ("part", "disk") and (n.get("type") == "part" or not n.get("children")):
+            out.append(("/dev/" + n["name"], n.get("mountpoint") or "", n.get("label") or ""))
+        for c in n.get("children", []) or []:
+            walk(c)
+    for n in j.get("blockdevices", []):
+        walk(n)
+    return out
+
+
+def mounted(disk):
+    return [m for _, m, _ in disk_parts(disk) if m]
+
+
+def eject_disk(disk):
+    """Размонтировать все разделы и обесточить (udisks, через polkit — без root). Возвращает текст ошибки или ''."""
+    for dev, mnt, _ in disk_parts(disk):
+        if mnt:
+            r = subprocess.run(["udisksctl", "unmount", "-b", dev], capture_output=True, text=True)
+            if r.returncode:
+                return (r.stderr or r.stdout).strip().splitlines()[-1] if (r.stderr or r.stdout) else "unmount"
+    if not disk.startswith("mmcblk"):  # кард-ридер обесточивать не нужно — он встроенный
+        subprocess.run(["udisksctl", "power-off", "-b", f"/dev/{disk}"], capture_output=True, text=True)
+    return ""
+
+
+def open_disk(disk):
+    parts = disk_parts(disk)
+    mnt = next((m for _, m, _ in parts if m), "")
+    if not mnt and parts:
+        r = subprocess.run(["udisksctl", "mount", "-b", parts[0][0]], capture_output=True, text=True)
+        m = re.search(r" at (.+?)\.?$", r.stdout.strip())
+        mnt = m.group(1) if m else ""
+    if mnt:
+        subprocess.Popen(["xdg-open", mnt], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def battery_info():
+    bat = next(iter(glob.glob("/sys/class/power_supply/BAT*")), None)
+    if not bat:
+        return {}
+    full = rd(f"{bat}/energy_full") or rd(f"{bat}/charge_full")
+    design = rd(f"{bat}/energy_full_design") or rd(f"{bat}/charge_full_design")
+    wear = round(100 - int(full) * 100 / int(design)) if full and design and int(design) else None
+    return {"wear": wear, "cycles": rd(f"{bat}/cycle_count")}
+
+
+def net_info():
+    """Wi-Fi (NetworkManager) и Bluetooth-устройства с зарядом — без root."""
+    out = {"wifi": None, "bt": []}
+    try:
+        r = subprocess.run(["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL", "dev", "wifi"], capture_output=True, text=True, timeout=2).stdout
+        for line in r.splitlines():
+            a = line.split(":")
+            if a[0] == "yes" and len(a) >= 3:
+                out["wifi"] = (":".join(a[1:-1]), a[-1])
+                break
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        r = subprocess.run(["bluetoothctl", "devices", "Connected"], capture_output=True, text=True, timeout=2).stdout
+        for line in r.splitlines():
+            parts = line.split(" ", 2)
+            if len(parts) == 3 and parts[0] == "Device":
+                info = subprocess.run(["bluetoothctl", "info", parts[1]], capture_output=True, text=True, timeout=2).stdout
+                m = re.search(r"Battery Percentage:.*\((\d+)\)", info)
+                out["bt"].append((parts[2], int(m.group(1)) if m else None))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return out
+
+
+def power_profile(set_to=None):
+    try:
+        if set_to:
+            subprocess.run(["powerprofilesctl", "set", set_to], capture_output=True, timeout=3)
+        return subprocess.run(["powerprofilesctl", "get"], capture_output=True, text=True, timeout=2).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+LID_DOT = "/sys/class/leds/tpacpi::lid_logo_dot/brightness"
+
+
+def lid_dot_writable():
+    return os.access(LID_DOT, os.W_OK)
+
+
+def lid_dot(on):
+    try:
+        with open(LID_DOT, "w") as f:
+            f.write("1" if on else "0")
+    except OSError:
+        pass
+
+
+def lid_closed():
+    return any("closed" in rd(p) for p in glob.glob("/proc/acpi/button/lid/*/state"))
+
+
+HISTORY = os.path.expanduser("~/.local/share/dockwatch/history.log")
+
+
+def log_event(text):
+    try:
+        os.makedirs(os.path.dirname(HISTORY), exist_ok=True)
+        with open(HISTORY, "a") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S  ") + text + "\n")
+    except OSError:
+        pass
+
+
+AUTOSTART = os.path.expanduser("~/.config/autostart/dockwatch.desktop")
+
+
+def autostart(enable=None):
+    if enable is True:
+        os.makedirs(os.path.dirname(AUTOSTART), exist_ok=True)
+        with open(AUTOSTART, "w") as f:
+            f.write("[Desktop Entry]\nType=Application\nName=DockWatch\nExec=dockwatch tray\nIcon=dockwatch\n"
+                    "X-GNOME-Autostart-enabled=true\nNoDisplay=false\n")
+    elif enable is False and os.path.exists(AUTOSTART):
+        os.remove(AUTOSTART)
+    return os.path.exists(AUTOSTART)
 
 
 def typec_power():
@@ -554,7 +715,7 @@ def sd_cards():
         r_ = rate(f"blk-r-{b}", int(f[2]) * 512) if len(f) > 6 else 0
         w_ = rate(f"blk-w-{b}", int(f[6]) * 512) if len(f) > 6 else 0
         item = tr("sd_card", size=human(size)) + (f" · «{label}»" if label else "") + (f" · {mnt}" if mnt else "")
-        out.append((item, f"↓{human(r_)}{tr('per_s')} ↑{human(w_)}{tr('per_s')}"))
+        out.append((item, f"↓{human(r_)}{tr('per_s')} ↑{human(w_)}{tr('per_s')}", r_ + w_, os.path.basename(b)))
     return out
 
 
@@ -621,7 +782,7 @@ def snapshot(cfg=None):
         for p in prof.get("ports", []):
             lab = p.get("label_docked") if docked and p.get("label_docked") else p.get("label", p["id"])
             ports[p["id"]] = dict(p, owner=where, label=cfg["labels"].get(p["id"]) or pick(lab),
-                                  busy=False, items=[], stats=[])
+                                  busy=False, items=[], stats=[], disks=[], rate=0.0)
     loose, loose_stats = [], []
     show = cfg.get("show_stats", True)
 
@@ -643,10 +804,13 @@ def snapshot(cfg=None):
             item += " · " + " + ".join(tr(m) for m in modes)
         if speed_text(d["speed"]):
             item += f" · {speed_text(d['speed'])}"
-        stat = usb_stats(d["name"]) if show else ""
+        stat, spd = usb_stats(d["name"])
+        stat = stat if show else ""
         pid = cfg["usb"].get(d["key"])
         if pid in ports:
             put(pid, item, stat)
+            ports[pid]["disks"] += usb_disks(d["name"])
+            ports[pid]["rate"] += spd
         else:
             loose.append(f"{item}  [{tr('on_dock') if d['dock'] else tr('on_laptop')} · {d['key']}]")
             loose_stats.append(stat)
@@ -669,6 +833,7 @@ def snapshot(cfg=None):
         stat = f"↓{human(r)}{tr('per_s')} ↑{human(w)}{tr('per_s')}"
         if pid:
             put(pid, item, stat)
+            ports[pid]["rate"] += r + w
         else:
             loose.append(item); loose_stats.append(stat if show else "")
     if pw["ac"]:
@@ -680,9 +845,11 @@ def snapshot(cfg=None):
         else:
             loose.append(item); loose_stats.append(stat if show else "")
     card = by_role("card", "laptop")
-    for item, stat in sd_cards():
+    for item, stat, spd, disk in sd_cards():
         if card:
             put(card, item, stat)
+            ports[card]["disks"].append(disk)
+            ports[card]["rate"] += spd
         else:
             loose.append(item); loose_stats.append(stat if show else "")
     jack = audio_jack()
@@ -705,7 +872,8 @@ def snapshot(cfg=None):
     busy = sum(p["busy"] for p in ports.values())
     return {"docked": docked, "groups": groups, "ports": ports, "loose": loose, "loose_stats": loose_stats,
             "busy": busy, "total": len(ports), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden,
-            "show_stats": show, "sensors": sensors(), "media": media_state(), "ts": time.time()}
+            "show_stats": show, "sensors": sensors(), "media": media_state(),
+            "battery": battery_info(), "net": net_info(), "lid_closed": lid_closed(), "ts": time.time()}
 
 
 def diff(old, new):
@@ -961,10 +1129,18 @@ def qt_app(mode):
             self.blink = 0
             self.scale = 1.0
             self.logos = {n: asset(f"{n}.png") for n in ("thinkpad", "ibm", "lenovo")}
+            self.hist = {}
+            self.profile = power_profile()
             self.setMouseTracking(True)
 
         def update_state(self, s, events):
             self.s = s
+            from collections import deque
+            for pid, pt in s["ports"].items():
+                if pt["busy"]:
+                    self.hist.setdefault(pid, deque(maxlen=60)).append(pt.get("rate", 0.0))
+                else:
+                    self.hist.pop(pid, None)
             for e in events:
                 self.log.insert(0, time.strftime("%H:%M:%S  ") + e)
             self.log = self.log[:5]
@@ -1157,12 +1333,29 @@ def qt_app(mode):
                     txt += f" · {p['watts']} {tr('W')}"
                 q.setFont(font(12, italic=True))
                 q.drawText(QRectF(W - 284, 46, 260, 20), Qt.AlignRight, txt)
+            b, n = self.s.get("battery") or {}, self.s.get("net") or {}
+            extra = []
+            if b.get("wear") is not None:
+                extra.append(tr("bat_health", w=b["wear"], c=b.get("cycles") or "?"))
+            if self.profile:
+                extra.append(tr(self.profile))
+            line2 = []
+            if n.get("wifi"):
+                line2.append(f"📶 {n['wifi'][0]} {n['wifi'][1]}%")
+            for name, bat in n.get("bt", []):
+                line2.append(f"ᛒ {name}" + (f" {bat}%" if bat is not None else ""))
+            q.setFont(font(10)); q.setPen(DIM)
+            if extra:
+                q.drawText(QRectF(W - 324, 64, 300, 16), Qt.AlignRight, " · ".join(extra))
+            if line2:
+                q.drawText(QRectF(W - 324, 79, 300, 16), Qt.AlignRight,
+                           QFontMetricsF(font(10)).elidedText("   ".join(line2), Qt.ElideRight, 300))
             if any(g.get("bezel") for g in self.s["groups"]):
                 left = max(x_after + 28, 190)
                 self.header_media(q, left, W / 2, 38, min(W - 2 * (left + 130), 2 * (W - 300 - W / 2)))
             # bodies, row by row
             self.rects = {}
-            y = 92
+            y = 98
             for row in rows_of([g for g in self.s["groups"] if not g.get("bezel")]):
                 h = max(g.get("height", 70) for g in row)
                 tower_w = 84 if any(g.get("tower") for g in row) else 0
@@ -1200,6 +1393,7 @@ def qt_app(mode):
             q.setFont(font(13))
             yy = y + 28
             rows = [(pt["label"], it, st, RED) for pt in self.s["ports"].values() for it, st in zip(pt["items"], pt["stats"])]
+            pid_of = {(pt["label"], pt["items"][0]): pt["id"] for pt in self.s["ports"].values() if pt["items"]}
             rows += [("?", it, st, QColor("#c9a227")) for it, st in zip(self.s["loose"], self.s["loose_stats"])]
             if self.s.get("dock_hidden"):
                 rows.append(("—", tr("dock_hidden"), "", DIM))
@@ -1217,7 +1411,18 @@ def qt_app(mode):
                 if st:  # потребление/нагрузка — отдельной строкой под устройством
                     yy += 16
                     q.setFont(font(11)); q.setPen(QColor("#b5565a"))
-                    q.drawText(QPointF(150, yy), QFontMetricsF(font(11)).elidedText(st, Qt.ElideRight, colw - 10))
+                    fm11 = QFontMetricsF(font(11))
+                    st_e = fm11.elidedText(st, Qt.ElideRight, colw - 90)
+                    q.drawText(QPointF(150, yy), st_e)
+                    hist = self.hist.get(pid_of.get((lab, it)))
+                    if hist and max(hist) > 0:  # мини-график скорости за последнюю минуту
+                        gx, gw_, gh = 158 + fm11.horizontalAdvance(st_e), 70, 12
+                        mx_ = max(hist)
+                        path = QPainterPath()
+                        for i, v in enumerate(hist):
+                            px_, py_ = gx + gw_ * i / max(1, len(hist) - 1), yy - gh * v / mx_
+                            path.lineTo(px_, py_) if i else path.moveTo(px_, py_)
+                        q.setPen(QPen(QColor("#d0464c"), 1.2)); q.setBrush(Qt.NoBrush); q.drawPath(path)
                 yy += 21
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(ex, y + 6), tr("events"))
             q.setFont(font(12)); q.setPen(DIM)
@@ -1237,6 +1442,15 @@ def qt_app(mode):
 
         def contextMenuEvent(self, e):
             m = QMenu(self)
+            pos = e.pos() / self.scale
+            hit = next((k for k, r in self.rects.items() if r.contains(pos)), None)
+            disks = list(dict.fromkeys(self.s["ports"][hit]["disks"])) if hit else []
+            if disks:
+                pt = self.s["ports"][hit]
+                m.addSection(pt["label"])
+                m.addAction(tr("open_files"), lambda: [open_disk(d) for d in disks])
+                m.addAction(tr("eject"), lambda: do_eject(pt["label"], disks))
+                m.addSeparator()
             populate(m, in_window=True)
             m.exec(e.globalPos())
 
@@ -1286,16 +1500,48 @@ def qt_app(mode):
     state = {"prev": view.s}
     tray = None
 
+    def notify(text):
+        if tray:
+            tray.showMessage("dockwatch", text, QSystemTrayIcon.Information, 5000)
+        else:
+            subprocess.Popen(["notify-send", "-a", "dockwatch", "dockwatch", text], stderr=subprocess.DEVNULL)
+
+    def blink(n=3):
+        if not (load_config().get("lid_blink") and lid_dot_writable()):
+            return
+        was = rd(LID_DOT) == "1"
+        for i in range(n * 2):
+            QTimer.singleShot(i * 220, lambda on=(i % 2 == 0) != was: lid_dot(on))
+        QTimer.singleShot(n * 2 * 220, lambda: lid_dot(was))
+
+    def do_eject(label, disks):
+        err = next((e for e in (eject_disk(d) for d in disks) if e), "")
+        notify(tr("eject_fail", x=label, e=err) if err else tr("ejected", x=label))
+        log_event(("eject failed " if err else "ejected ") + label)
+
     def tick():
         s = snapshot()
-        ev = diff(state["prev"], s)
+        prev = state["prev"]
+        ev = diff(prev, s)
         state["prev"] = s
         view.update_state(s, ev)
+        for e in ev:
+            log_event(e)
+        if ev:
+            blink()
+        # «не забудь флешку»: сняли с дока или закрыли крышку, а носитель всё ещё смонтирован
+        if prev and ((prev["docked"] and not s["docked"]) or (not prev.get("lid_closed") and s.get("lid_closed"))):
+            left = [pt["label"] for pt in prev["ports"].values() if any(mounted(d) for d in pt.get("disks", []))]
+            if left:
+                notify(tr("forgot", x=", ".join(left)))
         if tray:
             tray.setIcon(tray_icon(s["busy"], s["docked"]))
             tray.setToolTip(f"dockwatch · {tr('docked') if s['docked'] else tr('undocked')} · {tr('busy', n=s['busy'], m=s['total'])}")
             for e in ev[:3]:
                 tray.showMessage("dockwatch", e, QSystemTrayIcon.Information, 4000)
+        if s["ts"] - state.get("prof_ts", 0) > 10:
+            view.profile = power_profile()
+            state["prof_ts"] = s["ts"]
 
     def apply(**kw):
         global LANG
@@ -1322,6 +1568,31 @@ def qt_app(mode):
             a.setCheckable(True)
             a.setChecked(bool(cfg.get(opt)))
             a.toggled.connect(lambda v, o=opt: apply(**{o: v}))
+        if lid_dot_writable():
+            a = menu.addAction(tr("m_lid"))
+            a.setCheckable(True)
+            a.setChecked(bool(cfg.get("lid_blink")))
+            a.toggled.connect(lambda v: (apply(lid_blink=v), v and blink(2)))
+        elif os.path.exists(LID_DOT):
+            a = menu.addAction(tr("m_lid_na"))
+            a.setEnabled(False)
+        a = menu.addAction(tr("m_autostart"))
+        a.setCheckable(True)
+        a.setChecked(autostart())
+        a.toggled.connect(lambda v: autostart(v))
+        cur = power_profile()
+        if cur:
+            sub = menu.addMenu(tr("m_profile"))
+            grp = QActionGroup(sub)
+            for prof in ("power-saver", "balanced", "performance"):
+                a = sub.addAction(tr(prof))
+                a.setCheckable(True)
+                a.setChecked(prof == cur)
+                grp.addAction(a)
+                a.triggered.connect(lambda _=False, pr=prof: (power_profile(pr), setattr(view, "profile", power_profile()), view.update()))
+        menu.addAction(tr("m_history"), lambda: (os.makedirs(os.path.dirname(HISTORY), exist_ok=True),
+                                                  open(HISTORY, "a").close(),
+                                                  subprocess.Popen(["xdg-open", HISTORY], stderr=subprocess.DEVNULL)))
         det_dock, det_laptop = detect_profiles(cfg, usb_devices())
         for title, kind, choice_key, det, extra in (
                 ("m_laptop", "laptops", "laptop_choice", det_laptop, []),

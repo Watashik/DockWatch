@@ -1,0 +1,31 @@
+# Maintainer: Watashik <https://github.com/Watashik>
+pkgname=dockwatch
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Live port map of your docking station and laptop (ThinkPad style): tray, GUI and TUI, plug/unplug notifications"
+arch=('any')
+url="https://github.com/Watashik/DockWatch"
+license=('MIT')
+depends=('python' 'python-pyside6')
+makedepends=('git')
+optdepends=('udisks2: safely remove and open drives and SD cards from the port map'
+            'libpulse: microphone and sound state (pactl)'
+            'networkmanager: Wi-Fi network and signal in the header'
+            'bluez-utils: connected Bluetooth devices and their battery'
+            'power-profiles-daemon: switch power profile from the menu')
+source=("$pkgname::git+https://github.com/Watashik/DockWatch.git#tag=v$pkgver")
+sha256sums=('SKIP')
+
+package() {
+  cd "$srcdir/$pkgname"
+  install -Dm644 dockwatch.py "$pkgdir/usr/share/dockwatch/dockwatch.py"
+  chmod 755 "$pkgdir/usr/share/dockwatch/dockwatch.py"
+  cp -r --no-preserve=ownership profiles data "$pkgdir/usr/share/dockwatch/"
+  find "$pkgdir/usr/share/dockwatch" -name '__pycache__' -prune -exec rm -rf {} +
+  install -dm755 "$pkgdir/usr/bin"
+  ln -s /usr/share/dockwatch/dockwatch.py "$pkgdir/usr/bin/dockwatch"
+  install -Dm644 data/dockwatch.desktop "$pkgdir/usr/share/applications/dockwatch.desktop"
+  install -Dm644 data/dockwatch.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/dockwatch.svg"
+  install -Dm644 data/99-dockwatch.rules "$pkgdir/usr/lib/udev/rules.d/99-dockwatch.rules"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
