@@ -933,18 +933,14 @@ def qt_app(mode):
                 while x < x1 - 10:
                     q.drawRoundedRect(QRectF(x, r.center().y() - 12, 10, 24), 2, 2); x += 19
                 lines = sensors_lines(sn)
-                if lines:
+                if lines:  # подпись под решёткой, сама решётка остаётся открытой
                     f = font(11)
                     fm = QFontMetricsF(f)
-                    lines = [fm.elidedText(t, Qt.ElideRight, x1 - x0 - 20) for t in lines]
-                    tw = max(fm.horizontalAdvance(t) for t in lines) + 20
-                    ph = 17 * len(lines) + 8
-                    pill = QRectF((x0 + x1) / 2 - tw / 2, r.center().y() - ph / 2, tw, ph)
-                    q.setBrush(QColor(12, 12, 13, 225)); q.setPen(QPen(QColor("#2e2e30"), 1)); q.drawRoundedRect(pill, 9, 9)
                     q.setFont(f)
                     for i, t in enumerate(lines):
                         q.setPen((QColor("#e0a0a3") if k > 0.5 else TXT) if i == 0 else DIM)
-                        q.drawText(QRectF(pill.left(), pill.top() + 4 + i * 17, tw, 17), Qt.AlignCenter, t)
+                        q.drawText(QRectF(x0, r.bottom() + 3 + i * 16, x1 - x0, 16), Qt.AlignCenter,
+                                   fm.elidedText(t, Qt.ElideRight, x1 - x0))
 
         def paintEvent(self, ev):
             q = QPainter(self)
@@ -1004,7 +1000,7 @@ def qt_app(mode):
                     if g.get("tower"):
                         self.tower(q, QRectF(W - 24 - tower_w + 8, y + 2, tower_w - 8, h + 18))
                     x += gw + gap
-                y += h + (64 if self.s["show_stats"] else 52)
+                y += h + (64 if self.s["show_stats"] or any(g.get("vents") for g in row) else 52)
             # connected / events
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(28, y + 6), tr("connected"))
             q.setFont(font(13))
