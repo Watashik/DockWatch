@@ -1000,15 +1000,23 @@ def qt_app(mode):
             elif kind == "audio":
                 path.addEllipse(QPointF(0, 0), 7.5, 7.5); inner.addEllipse(QPointF(0, 0), 3.2, 3.2)
             elif kind == "card":
-                path.addRoundedRect(QRectF(-22, -9, 44, 6), 2, 2); path.addRoundedRect(QRectF(-22, 0, 44, 10), 3, 3)
-                inner.addEllipse(QPointF(-15, 5), 1.6, 1.6)
+                # сверху — лоток SIM с отверстием для скрепки, снизу — тонкий слот microSD (светится только он)
+                tray = QPainterPath(); tray.addRoundedRect(QRectF(-22, -11, 44, 10), 3, 3)
+                q.setPen(QPen(QColor("#3a3a3d"), 1.6)); q.setBrush(QColor("#141415")); q.drawPath(tray)
+                q.setPen(Qt.NoPen); q.setBrush(HOLE); q.drawEllipse(QPointF(-15, -6), 1.6, 1.6)
+                path.addRoundedRect(QRectF(-22, 3, 44, 5), 2, 2)
+                inner.addRect(QRectF(-18, 4.6, 36, 1.8))
             else:
                 path.addRoundedRect(QRectF(-12, -8, 24, 16), 3, 3)
             if busy:
+                if kind == "card":
+                    q.translate(0, 5.5)  # свечение — вокруг слота карты, а не лотка SIM
                 g = QRadialGradient(QPointF(0, 0), 46)
                 cg = QColor(RED); cg.setAlpha(95); g.setColorAt(0, cg)
                 cg = QColor(RED); cg.setAlpha(0); g.setColorAt(1, cg)
                 q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawEllipse(QPointF(0, 0), 46, 30)
+                if kind == "card":
+                    q.translate(0, -5.5)
             q.setPen(QPen(QColor("#3a3a3d"), 1.6)); q.setBrush(HOLE); q.drawPath(path)
             q.setPen(Qt.NoPen); q.setBrush(RED if busy else QColor("#2a2a2c")); q.drawPath(inner)
             if kind == "vga":
