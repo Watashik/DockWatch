@@ -2206,44 +2206,26 @@ def qt_app(mode):
             bw, bh = w + 10 * kz, 22 * kz     # пластиковый корпус
             body_top = edge + (1 - e) * 46 * kz
             q.save(); q.translate(c); q.rotate(angle); q.setOpacity(alpha); q.setRenderHint(QPainter.Antialiasing)
-            # тень, кабель, хвостовик, корпус — снаружи разъёма
-            sh = QRadialGradient(QPointF(0, body_top + bh * 0.7), bw)
-            sh.setColorAt(0, QColor(0, 0, 0, 90)); sh.setColorAt(1, QColor(0, 0, 0, 0))
-            q.setPen(Qt.NoPen); q.setBrush(QBrush(sh)); q.drawEllipse(QPointF(0, body_top + bh * 0.7), bw, bh * 0.8)
+            # минималистично, в цветах темы: плоский корпус, прямой кабель, металл — одним цветом
             body_bot = body_top + bh
-            path = QPainterPath(QPointF(0, body_bot + 4 * kz))
-            path.cubicTo(QPointF(0, body_bot + 30 * kz), QPointF(14 * kz, body_bot + 46 * kz), QPointF(22 * kz, body_bot + 80 * kz))
-            q.setBrush(Qt.NoBrush)
-            q.setPen(QPen(QColor(12, 12, 14), 6 * kz, Qt.SolidLine, Qt.RoundCap)); q.drawPath(path)
-            q.setPen(QPen(QColor(70, 70, 76), 1.6 * kz, Qt.SolidLine, Qt.RoundCap)); q.drawPath(path.translated(-1.2 * kz, 0))
-            q.setPen(Qt.NoPen); q.setBrush(QColor(28, 28, 31))
-            q.drawRoundedRect(QRectF(-5 * kz, body_bot - 2 * kz, 10 * kz, 9 * kz), 3 * kz, 3 * kz)
-            # металл — только та часть, что ещё снаружи (за краем разъёма его не видно)
-            q.save(); q.setClipRect(QRectF(-200, edge, 400, 400))
+            q.setPen(QPen(EDGE, 3 * kz, Qt.SolidLine, Qt.RoundCap))
+            q.drawLine(QPointF(0, body_bot), QPointF(0, body_bot + 60 * kz))
+            q.save(); q.setClipRect(QRectF(-200, edge, 400, 400))  # металл виден только снаружи разъёма
+            q.setPen(Qt.NoPen); q.setBrush(METAL)
             tip = QRectF(-w / 2, body_top - th, w, th + 1)
-            mg = QLinearGradient(tip.topLeft(), tip.topRight())
-            mg.setColorAt(0, QColor(150, 150, 158)); mg.setColorAt(0.45, QColor(235, 235, 240)); mg.setColorAt(1, QColor(120, 120, 128))
-            q.setPen(QPen(QColor(90, 90, 96), 0.8)); q.setBrush(QBrush(mg))
-            if kind in ("usbc", "audio", "dc"):
-                rr = th / 2 if kind == "usbc" else w / 2
-                q.drawRoundedRect(tip, rr, rr)
-            elif kind == "rj45":
-                q.setBrush(QColor(200, 210, 220, 150)); q.drawRoundedRect(tip, 2, 2)
-            else:
-                q.drawRect(tip)
+            rr = th / 2 if kind == "usbc" else (w / 2 if kind in ("audio", "dc") else 1.5)
+            q.drawRoundedRect(tip, rr, rr)
             q.restore()
-            body = QRectF(-bw / 2, body_top, bw, bh)
-            g = QLinearGradient(body.topLeft(), body.topRight())
-            g.setColorAt(0, QColor(36, 36, 40)); g.setColorAt(0.35, QColor(72, 72, 78)); g.setColorAt(1, QColor(24, 24, 27))
-            q.setPen(QPen(QColor(10, 10, 12), 1)); q.setBrush(QBrush(g)); q.drawRoundedRect(body, 4 * kz, 4 * kz)
-            q.setPen(QPen(QColor(255, 255, 255, 40), 1))
-            q.drawLine(QPointF(body.left() + 3 * kz, body.top() + 3 * kz), QPointF(body.left() + 3 * kz, body.bottom() - 4 * kz))
+            q.setPen(QPen(EDGE, 1.2)); q.setBrush(BODY)
+            q.drawRoundedRect(QRectF(-bw / 2, body_top, bw, bh), 4 * kz, 4 * kz)
+            q.setPen(QPen(accent(kind), 1.6 * kz))  # тонкая полоска цвета порта
+            q.drawLine(QPointF(-bw / 2 + 4 * kz, body_top + 4 * kz), QPointF(bw / 2 - 4 * kz, body_top + 4 * kz))
             q.restore()
             if dt > T_IN * 0.85:  # волна в момент контакта
                 r_ = (dt - T_IN * 0.85) / 0.6
                 if r_ < 1:
-                    col = QColor(accent(kind)); col.setAlphaF(max(0.0, 0.8 * (1 - r_)))
-                    q.save(); q.setPen(QPen(col, 2 * kz)); q.setBrush(Qt.NoBrush)
+                    col = QColor(accent(kind)); col.setAlphaF(max(0.0, 0.6 * (1 - r_)))
+                    q.save(); q.setPen(QPen(col, 1.2 * kz)); q.setBrush(Qt.NoBrush)
                     q.drawEllipse(c, (10 + 26 * r_) * kz, (8 + 18 * r_) * kz); q.restore()
 
         def top_view(self, q, y, W, kz):
@@ -2626,7 +2608,8 @@ def qt_app(mode):
             CW, off = W, 0.0
             kz = min(1.45, max(1.0, W / BASE_W))
             if self.topview:
-                y = self.top_view(q, y, W, kz)
+                # вид сверху ужимается по высоте, чтобы под ним поместились списки и не залезть на подвал
+                y = self.top_view(q, y, W, max(0.55, min(kz, (H - y - 230) / 460)))
             for row in ([] if self.topview else rows_of([g for g in self.s["groups"] if not g.get("bezel")])):
                 h = 26 + 32 * kz
                 tower_w = 84 * (1 + (kz - 1) * 0.5) if any(g.get("tower") for g in row) else 0
@@ -2700,7 +2683,7 @@ def qt_app(mode):
             ex = W * 0.60
             colw = ex - 150 - 20  # текст списка не должен залезать на колонку «События»
             for lab, it, st, col in rows:
-                if yy > H - 50 - (16 if st else 0):
+                if yy > H - 100 - (16 if st else 0):  # не заезжать на подвал и кнопки
                     break
                 q.setPen(Qt.NoPen); q.setBrush(col); q.drawEllipse(QPointF(36, yy - 4), 3.5, 3.5)
                 q.setFont(font(13)); q.setPen(col); q.drawText(QPointF(48, yy), lab)
@@ -2726,6 +2709,8 @@ def qt_app(mode):
             q.setFont(font(12)); q.setPen(DIM)
             efm = QFontMetricsF(font(12))
             for i, e in enumerate(self.log or [tr("quiet")]):
+                if y + 28 + i * 19 > H - 100:
+                    break
                 q.drawText(QPointF(ex + 8, y + 28 + i * 19), efm.elidedText(e, Qt.ElideRight, W - ex - 32))
             q.restore(); W = W_full
             # footer like the wallpaper: IBM — red line — Technologies and Design
