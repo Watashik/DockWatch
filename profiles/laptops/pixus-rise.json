@@ -1,0 +1,25 @@
+{
+  "id": "pixus-rise",
+  "name": "Pixus Rise",
+  "match": {"dmi": ["Pixus Rise"]},
+  "theme": "generic",
+  "brand": "Pixus",
+  "footer": "Pixus Rise",
+  "keys": {"spk": "🔇", "mic": "🎙", "kbd": "⌨"},
+  "note": "2 USB ports per the owner; the firmware reports 5. Port order to be checked against a photo; USB binding — calibrate once.",
+  "groups": [
+    {"id": "bezel", "row": -1, "w": 1.0, "height": 56, "bezel": true, "title": "bezel"},
+    {"id": "left", "row": 1, "w": 0.5, "height": 62,
+     "title": {"uk": "Pixus Rise · лівий бік", "ru": "Pixus Rise · левый бок", "en": "Pixus Rise · left side"}},
+    {"id": "right", "row": 1, "w": 0.5, "height": 62, "vents": [0.5, 0.95],
+     "title": {"uk": "правий бік", "ru": "правый бок", "en": "right side"}}
+  ],
+  "ports": [
+    {"id": "power", "kind": "barrel_dot", "g": "left", "x": 0.12, "mark": "⎓", "label": "@power", "role": "power"},
+    {"id": "hdmi", "kind": "hdmi", "g": "left", "x": 0.38, "mark": "HDMI", "label": "HDMI", "video": true, "drm": ["HDMI-A-1", "HDMI-A-2"]},
+    {"id": "usb1", "kind": "usb", "g": "left", "x": 0.62, "mark": "SS", "label": "USB 1"},
+    {"id": "usb2", "kind": "usb", "g": "left", "x": 0.86, "mark": "USB", "label": "USB 2"},
+    {"id": "audio", "kind": "audio", "g": "right", "x": 0.12, "mark": "🎧", "label": "@audio", "role": "jack"},
+    {"id": "sd", "kind": "sdslot", "g": "right", "x": 0.32, "mark": "SD", "label": "@card", "role": "card"}
+  ]
+}
