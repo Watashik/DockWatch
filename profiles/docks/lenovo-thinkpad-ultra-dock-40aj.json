@@ -148,15 +148,15 @@
     "17ef:3075"
   ],
   "usb": {
-    "dock2.2.2.1": "usb1",
-    "dock3.2.2.1": "usb1",
-    "dock2.2.2.2": "usb2",
-    "dock3.2.2.2": "usb2",
-    "dock2.2.2.3": "usb3",
-    "dock3.2.2.3": "usb3",
-    "dock2.2.3": "usb4",
-    "dock3.2.3": "usb4",
-    "dock2.2.4": "usbc2",
-    "dock3.2.4": "usbc2"
+    "dock2.2.1": "usb1",
+    "dock3.2.1": "usb1",
+    "dock2.2.2": "usb2",
+    "dock3.2.2": "usb2",
+    "dock2.2.3": "usb3",
+    "dock3.2.3": "usb3",
+    "dock2.3": "usb4",
+    "dock3.3": "usb4",
+    "dock2.4": "usbc2",
+    "dock3.4": "usbc2"
   }
 }
