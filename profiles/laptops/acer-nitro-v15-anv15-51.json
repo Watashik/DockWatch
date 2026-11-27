@@ -1,6 +1,7 @@
 {
   "id": "acer-nitro-v15-anv15-51",
   "name": "Acer Nitro V 15 (ANV15-51)",
+  "top": {"size": [362, 239], "hinges": [0.18, 0.82], "keyboard": {"x": 0.03, "y": 0.08, "w": 0.94, "h": 0.43, "layout": "numpad", "fn_left": false, "power_key": true}, "touchpad": {"under_u": 6.6, "w": 0.3}, "trackpoint": false, "buttons": false, "power": null, "fingerprint": null, "logo": null},
   "match": {
     "dmi": [
       "Nitro ANV15-51",

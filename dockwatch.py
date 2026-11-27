@@ -1565,6 +1565,22 @@ def check_update():
     return ("release", tag) if tag and newer else ("none", VERSION)
 
 
+def top_spec(laptop):
+    """Как выглядит ноутбук сверху: раздел "top" профиля поверх шаблона.
+    Шаблон: 14" — без цифрового блока, 15–17" (или "numpad") — с ним; у ThinkPad — трекпойнт и три кнопки."""
+    t = dict(laptop.get("top") or {})
+    tp = (laptop.get("brand") or brand_of()[0] if laptop.get("auto") else laptop.get("brand", "")) == "ThinkPad"
+    big = bool(re.search(r"15|16|17", laptop.get("name", ""))) and not tp
+    base = {"size": [359, 250] if big else [325, 225], "hinges": [0.15, 0.85],
+            "keyboard": {"x": 0.03 if big else 0.06, "y": 0.08, "w": 0.94 if big else 0.88, "h": 0.42,
+                         "layout": "numpad" if big else "standard", "fn_left": tp, "power_key": not tp},
+            "touchpad": {"w": 0.3 if big else 0.34}, "trackpoint": tp, "buttons": tp, "power": [0.955, 0.085] if tp else None,
+            "fingerprint": None, "logo": {"text": laptop.get("brand", ""), "x": 0.84, "y": 0.88, "angle": -37 if tp else 0}}
+    for k, v in t.items():
+        base[k] = {**base[k], **v} if isinstance(v, dict) and isinstance(base.get(k), dict) else v
+    return base
+
+
 def dock_compat(dock, laptop, docked):
     """Подходит ли док к ноутбуку: механические доки — по разъёму и списку моделей, USB-C — по наличию USB-C."""
     if not dock or not laptop or docked:
@@ -2279,8 +2295,12 @@ def qt_app(mode):
                     q.drawEllipse(c, (10 + 26 * r_) * kz, (8 + 18 * r_) * kz); q.restore()
 
         def top_view(self, q, y, W, kz):
-            """Вид сверху: ноутбук с клавиатурой, порты по бокам (по своим местам), док — полосой сзади."""
-            lw, lh = 420 * kz, 298 * kz
+            """Вид сверху: ноутбук с клавиатурой, порты по бокам (по своим местам), док — полосой сзади.
+            Раскладка корпуса — из раздела "top" профиля (как схема портов), иначе — шаблон по размеру/бренду."""
+            top = top_spec(self.s.get("laptop") or {})
+            mw, mh = top["size"]
+            lw = 420 * kz * min(1.12, mw / 331)
+            lh = lw * mh / mw
             dock = self.s.get("dock") if not self.s.get("dock_hidden") else None
             x0 = (W - lw) / 2
             y0 = y + (112 if dock else 46) * kz
@@ -2321,18 +2341,20 @@ def qt_app(mode):
                 dps = sorted((pt for pt in self.s["ports"].values() if pt["owner"] == "dock"), key=lambda p_: -p_["x"])
                 for i, pt in enumerate(dps):  # подписи вплотную стоящих разъёмов — в два яруса
                     mark(dr.left() + dr.width() * (1 - pt["x"]), dr.top(), False, pt, "up", 16 if i % 2 else 0)
-            # корпус (пропорции L14: 331×235 мм), петли, клавиатура как на настоящей ThinkPad
+            # корпус, петли, клавиатура, тачпад — по описанию "top" из профиля
             body = QRectF(x0, y0, lw, lh)
             grad = QLinearGradient(body.topLeft(), body.bottomLeft())
             grad.setColorAt(0, BODY_HI); grad.setColorAt(0.08, BODY); grad.setColorAt(1, BODY_LO)
             q.setPen(QPen(EDGE, 1.5)); q.setBrush(QBrush(grad)); q.drawRoundedRect(body, 14, 14)
             q.setPen(QPen(EDGE, 1)); q.setBrush(QColor(150, 150, 155))
-            for hx in (0.125, 0.875):  # петли — у краёв, узкие (как на фото L14)
+            for hx in top["hinges"]:
                 q.drawRoundedRect(QRectF(x0 + lw * hx - 8 * kz, y0 - 3 * kz, 16 * kz, 7 * kz), 2, 2)
             lap = self.s.get("laptop") or {}
-            tp_style = lap.get("brand", "ThinkPad") == "ThinkPad"
-            kb = QRectF(x0 + lw * 0.045, y0 + lh * 0.07, lw * 0.865, lh * 0.45)
-            u = kb.width() / 15.0
+            k_ = top["keyboard"]
+            kb = QRectF(x0 + lw * k_["x"], y0 + lh * k_["y"], lw * k_["w"], lh * k_["h"])
+            numpad = k_.get("layout") == "numpad"
+            units = 19.0 if numpad else 15.0
+            u = kb.width() / units
             rh = kb.height() / 5.6           # обычный ряд; ряд F-клавиш — 0.6
             gap = 1.6 * kz
             self.kb_keys = {}
@@ -2356,60 +2378,76 @@ def qt_app(mode):
             yy = kb.top()
             frow = [("Esc", 1)] + [(f"F{i}", c) for i, c in zip(range(1, 13), (59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 87, 88))] + \
                 [("Hm", 102), ("End", 107), ("Ins", 110), ("Del", 111)]
-            for i, (lab, code) in enumerate(frow):  # Esc, F1–F12, Home, End, Insert, Delete
-                key(i * 15 / 17, yy, 15 / 17, rh * 0.6, lab, code)
+            if k_.get("power_key"):  # кнопка питания — последней клавишей ряда F
+                frow.append(("⏻", None))
+            for i, (lab, code) in enumerate(frow):
+                key(i * units / len(frow), yy, units / len(frow), rh * 0.6, lab, code)
             yy += rh * 0.6
-            # коды evdev (не зависят от раскладки): ряды как на L14
             rows_k = [
                 [("`", 41, 1)] + [(str((i + 1) % 10), 2 + i, 1) for i in range(10)] + [("-", 12, 1), ("=", 13, 1), ("⌫", 14, 2)],
                 [("Tab", 15, 1.5)] + [(ch, 16 + i, 1) for i, ch in enumerate("QWERTYUIOP")] + [("[", 26, 1), ("]", 27, 1), ("\\", 43, 1.5)],
                 [("Caps", 58, 1.75)] + [(ch, 30 + i, 1) for i, ch in enumerate("ASDFGHJKL")] + [(";", 39, 1), ("'", 40, 1), ("Enter", 28, 2.25)],
                 [("Shift", 42, 2.25)] + [(ch, c, 1) for ch, c in zip("ZXCVBNM,./", (44, 45, 46, 47, 48, 49, 50, 51, 52, 53))] + [("Shift", 54, 2.75)],
             ]
+            row_y = []
             for row_ in rows_k:
+                row_y.append(yy)
                 xu = 0
                 for lab, code, wu in row_:
                     key(xu, yy, wu, rh, lab, code); xu += wu
                 yy += rh
+            row_y.append(yy)
             xu = 0
-            for lab, code, wu in (("Fn", None, 1), ("Ctrl", 29, 1), ("⊞", 125, 1), ("Alt", 56, 1), ("", 57, 5), ("Alt", 100, 1),
-                                  ("Prt", 99, 1), ("Ctrl", 97, 1)):
+            bottom = (("Fn", None, 1), ("Ctrl", 29, 1), ("⊞", 125, 1), ("Alt", 56, 1), ("", 57, 5), ("Alt", 100, 1),
+                      ("Prt", 99, 1), ("Ctrl", 97, 1)) if k_.get("fn_left", True) else \
+                (("Ctrl", 29, 1), ("Fn", None, 1), ("⊞", 125, 1), ("Alt", 56, 1), ("", 57, 5), ("Alt", 100, 1),
+                 ("Ctrl", 97, 1), ("☰", 127, 1))
+            for lab, code, wu in bottom:
                 key(xu, yy, wu, rh, lab, code); xu += wu
             for j, (top_k, bot_k) in enumerate(((("PU", 104), ("←", 105)), (("↑", 103), ("↓", 108)), (("PD", 109), ("→", 106)))):
                 key(xu + j, yy, 1, rh / 2, *top_k); key(xu + j, yy + rh / 2, 1, rh / 2, *bot_k)
+            if numpad:  # цифровой блок справа (15–17")
+                pad = [[("Num", 69), ("/", 98), ("*", 55), ("-", 74)], [("7", 71), ("8", 72), ("9", 73), ("+", 78)],
+                       [("4", 75), ("5", 76), ("6", 77), ("+", None)], [("1", 79), ("2", 80), ("3", 81), ("⏎", 96)],
+                       [("0", 82), ("0", None), (".", 83), ("⏎", None)]]
+                for i, row_ in enumerate(pad):
+                    for j, (lab, code) in enumerate(row_):
+                        key(15.2 + j * 0.95, row_y[i] if i < len(row_y) else yy, 0.95, rh, lab, code)
             kb_bottom = yy + rh
-            if tp_style:  # трекпойнт между G, H и B
-                tpx = kb.left() + 6.75 * u
+            if top.get("trackpoint"):  # трекпойнт между G, H и B
                 q.setPen(Qt.NoPen); q.setBrush(RED)
-                q.drawEllipse(QPointF(tpx, kb.top() + rh * 0.6 + rh * 3), 4.2 * kz, 4.2 * kz)
-            # кнопка питания справа сверху
-            q.setPen(QPen(EDGE, 1)); q.setBrush(KEYC)
-            q.drawEllipse(QPointF(x0 + lw * 0.955, y0 + lh * 0.085), 7 * kz, 7 * kz)
-            q.setPen(QPen(LED_ON, 1)); q.drawEllipse(QPointF(x0 + lw * 0.955, y0 + lh * 0.085), 2 * kz, 2 * kz)
-            # тачпад под пробелом, над ним три кнопки с красными полосками
-            cx_ = kb.left() + 6.6 * u
-            tw_, top_ = lw * 0.31, kb_bottom + lh * 0.03
-            if tp_style:
+                q.drawEllipse(QPointF(kb.left() + 6.75 * u, row_y[3]), 4.2 * kz, 4.2 * kz)
+            if top.get("power"):  # отдельная круглая кнопка питания
+                pxy = QPointF(x0 + lw * top["power"][0], y0 + lh * top["power"][1])
+                q.setPen(QPen(EDGE, 1)); q.setBrush(KEYC); q.drawEllipse(pxy, 7 * kz, 7 * kz)
+                q.setPen(QPen(LED_ON, 1)); q.drawEllipse(pxy, 2 * kz, 2 * kz)
+            # тачпад; у ThinkPad над ним три кнопки с красными полосками
+            t_ = top["touchpad"]
+            cx_ = kb.left() + t_.get("under_u", 6.6) * u if "x" not in t_ else x0 + lw * t_["x"]
+            tw_, top_ = lw * t_["w"], kb_bottom + lh * 0.03
+            if top.get("buttons"):
                 bh_ = lh * 0.055
                 q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(KEYC)
-                for k_, (a_, b_) in enumerate(((0, 0.4), (0.4, 0.6), (0.6, 1.0))):
+                for k2, (a_, b_) in enumerate(((0, 0.4), (0.4, 0.6), (0.6, 1.0))):
                     br = QRectF(cx_ - tw_ / 2 + tw_ * a_ + 1, top_, tw_ * (b_ - a_) - 2, bh_)
                     q.drawRoundedRect(br, 2, 2)
-                    if k_ != 1:
+                    if k2 != 1 and top.get("trackpoint"):
                         q.setPen(Qt.NoPen); q.setBrush(RED)
                         q.drawRect(QRectF(br.left() + 3, br.top() + bh_ * 0.35, br.width() - 6, 1.6 * kz))
                         q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(KEYC)
                 top_ += bh_ + 3 * kz
-            tp = QRectF(cx_ - tw_ / 2, top_, tw_, y0 + lh * 0.93 - top_)
+            tp = QRectF(cx_ - tw_ / 2, top_, tw_, y0 + lh * t_.get("bottom", 0.93) - top_)
             q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(BODY_HI); q.drawRoundedRect(tp, 6, 6)
-            # сканер отпечатка справа от тачпада
-            q.setPen(QPen(EDGE, 1)); q.setBrush(KEYC)
-            q.drawRoundedRect(QRectF(tp.right() + lw * 0.06, tp.top() + 4 * kz, 16 * kz, 12 * kz), 3, 3)
-            # надпись бренда по диагонали справа снизу
-            q.save(); q.translate(x0 + lw * 0.86, y0 + lh * 0.86); q.rotate(-37)
-            q.setFont(font(int(13 * kz), True, True)); q.setPen(DIM)
-            q.drawText(QPointF(-36 * kz, 0), lap.get("brand", "ThinkPad") or "ThinkPad")
-            q.restore()
+            if top.get("fingerprint"):
+                fx, fy_ = top["fingerprint"]
+                q.setPen(QPen(EDGE, 1)); q.setBrush(KEYC)
+                q.drawRoundedRect(QRectF(x0 + lw * fx - 8 * kz, y0 + lh * fy_ - 6 * kz, 16 * kz, 12 * kz), 3, 3)
+            lg = top.get("logo")
+            if lg:  # надпись бренда на корпусе
+                q.save(); q.translate(x0 + lw * lg.get("x", 0.86), y0 + lh * lg.get("y", 0.86)); q.rotate(lg.get("angle", 0))
+                q.setFont(font(int(13 * kz), True, True)); q.setPen(DIM)
+                q.drawText(QRectF(-80 * kz, -12 * kz, 160 * kz, 24 * kz), Qt.AlignCenter, lg.get("text") or lap.get("brand", ""))
+                q.restore()
             # порты ноутбука по бокам: левый бок — сзади наперёд сверху вниз, правый — наоборот (как смотреть с боку)
             side_of = {}
             for g in self.s["groups"]:
@@ -2417,7 +2455,7 @@ def qt_app(mode):
                 side_of[g["id"]] = ("left" if "left" in gid else "right" if "right" in gid else
                                     "rear" if ("rear" in gid or "back" in gid) else "front" if "front" in gid else None)
             for pt in self.s["ports"].values():
-                if pt["owner"] != "laptop":
+                if pt["owner"] != "laptop" or pt["kind"] == "led":  # светодиоды сверху не видны
                     continue
                 sd = side_of.get(pt["g"])
                 if sd == "left":

@@ -134,6 +134,9 @@ Profiles are plain JSON — copy an existing one:
   `label_docked`, `typec` (e.g. `port0`) and `drm` (e.g. `["HDMI-A-1"]`).
   LEDs: `"led": "power"` or `"charge"`, optional `"led_colors": {"low": "#ff3b30", "full": "#ffffff", "full_at": 90}`.
 - `theme`, `brand` (header wordmark), `footer` — looks.
+- `top` — how the laptop looks from above (top view), like the port layout: `size` in mm, `hinges`, `keyboard`
+  (`x`/`y`/`w`/`h` as fractions, `layout`: `standard` or `numpad`, `fn_left`, `power_key`), `touchpad` (`w`, `under_u` or `x`),
+  `trackpoint`, `buttons`, `power` and `fingerprint` positions, `logo`. Without it a template by size and brand is used.
 
 Check it with `python tools/check_profiles.py` (also run by GitHub Actions on every push), then run `dockwatch calibrate` once. New profiles are welcome — open an issue with the **New dock / laptop profile** form
 (photos of the sides + the archive from `dockwatch report`).
