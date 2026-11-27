@@ -2294,8 +2294,8 @@ def qt_app(mode):
             grad.setColorAt(0, BODY_HI); grad.setColorAt(0.08, BODY); grad.setColorAt(1, BODY_LO)
             q.setPen(QPen(EDGE, 1.5)); q.setBrush(QBrush(grad)); q.drawRoundedRect(body, 14, 14)
             q.setPen(QPen(EDGE, 1)); q.setBrush(QColor(150, 150, 155))
-            for hx in (0.24, 0.76):  # петли
-                q.drawRoundedRect(QRectF(x0 + lw * hx - 14 * kz, y0 - 3 * kz, 28 * kz, 8 * kz), 2, 2)
+            for hx in (0.125, 0.875):  # петли — у краёв, узкие (как на фото L14)
+                q.drawRoundedRect(QRectF(x0 + lw * hx - 8 * kz, y0 - 3 * kz, 16 * kz, 7 * kz), 2, 2)
             lap = self.s.get("laptop") or {}
             tp_style = lap.get("brand", "ThinkPad") == "ThinkPad"
             kb = QRectF(x0 + lw * 0.045, y0 + lh * 0.07, lw * 0.865, lh * 0.45)
