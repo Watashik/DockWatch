@@ -1,0 +1,13 @@
+Package: dockwatch
+Version: @VERSION@
+Architecture: all
+Maintainer: Watashik <https://github.com/Watashik>
+Depends: python3 (>= 3.10), python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtwidgets, python3-pyside6.qtnetwork
+Recommends: python3-pyside6.qtsvg, udisks2, pulseaudio-utils, network-manager, bluez, power-profiles-daemon
+Section: utils
+Priority: optional
+Homepage: https://github.com/Watashik/DockWatch
+Description: live port map of your docking station and laptop
+ Shows which connectors of the dock and the laptop are in use, what is
+ plugged in, power and bandwidth, with tray icon, window and terminal views
+ and plug/unplug notifications. ThinkPad style, works with any laptop.

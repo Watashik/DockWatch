@@ -1,0 +1,36 @@
+name: packages
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh packaging/debian/build-deb.sh
+      - run: dpkg-deb --info dockwatch_*_all.deb && dpkg-deb --contents dockwatch_*_all.deb | head -20
+      - uses: actions/upload-artifact@v4
+        with: {name: deb, path: "dockwatch_*_all.deb"}
+  rpm:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - run: dnf -y install git rpm-build
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "$PWD" && sh packaging/fedora/build-rpm.sh
+      - run: cp ~/rpmbuild/RPMS/noarch/dockwatch-*.rpm .
+      - uses: actions/upload-artifact@v4
+        with: {name: rpm, path: "dockwatch-*.rpm"}
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [deb, rpm]
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/download-artifact@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            deb/*.deb
+            rpm/*.rpm

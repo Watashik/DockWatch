@@ -25,6 +25,8 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.realpath(__file__))
+VERSION = "0.3.0"
+REPO = "Watashik/DockWatch"
 PROFILES = os.path.join(HERE, "profiles")
 CONFIG_DIR = os.path.expanduser("~/.config/dockwatch")
 CONFIG = os.path.join(CONFIG_DIR, "config.json")
@@ -45,6 +47,7 @@ TR = {
     "power": {"uk": "Живлення", "ru": "Питание", "en": "Power"},
     "card": {"uk": "Картка", "ru": "Карта", "en": "Card"},
     "dock": {"uk": "Док", "ru": "Док", "en": "Dock"},
+    "laptop": {"uk": "Ноутбук", "ru": "Ноутбук", "en": "Laptop"},
     "on_dock": {"uk": "док", "ru": "док", "en": "dock"},
     "on_laptop": {"uk": "ноутбук", "ru": "ноутбук", "en": "laptop"},
     "monitor": {"uk": "монітор", "ru": "монитор", "en": "monitor"},
@@ -204,6 +207,40 @@ TR = {
     "compat_nousbc": {"uk": "⚠ док під'єднується по USB-C, а в цього ноутбука USB-C немає",
                       "ru": "⚠ док подключается по USB-C, а у этого ноутбука нет USB-C",
                       "en": "⚠ this dock connects over USB-C, but this laptop has no USB-C"},
+    "m_wizard": {"uk": "🧭 Майстер налаштування", "ru": "🧭 Мастер настройки", "en": "🧭 Setup wizard"},
+    "wz_title": {"uk": "DockWatch — перший запуск", "ru": "DockWatch — первый запуск", "en": "DockWatch — first run"},
+    "wz_hello": {"uk": "Вітаю! Кілька кроків — і схема портів буде як на вашому ноутбуці.",
+                 "ru": "Привет! Несколько шагов — и схема портов будет как на вашем ноутбуке.",
+                 "en": "Hi! A few steps and the port map will match your laptop."},
+    "wz_look": {"uk": "Вигляд", "ru": "Внешний вид", "en": "Look"},
+    "wz_hw": {"uk": "Ваше залізо", "ru": "Ваше железо", "en": "Your hardware"},
+    "wz_hw_sub": {"uk": "Знайдено автоматично. Якщо неправильно — виберіть зі списку.",
+                  "ru": "Найдено автоматически. Если неверно — выберите из списка.",
+                  "en": "Detected automatically. If it is wrong, pick from the list."},
+    "wz_done": {"uk": "Готово", "ru": "Готово", "en": "Done"},
+    "wz_cal": {"uk": "Одразу відкалібрувати USB-порти (вставляти будь-що по черзі)",
+               "ru": "Сразу откалибровать USB-порты (вставлять что угодно по очереди)",
+               "en": "Calibrate USB ports now (plug anything in, one by one)"},
+    "wz_buttons": {"uk": "Далі|Назад|Готово|Скасувати", "ru": "Далее|Назад|Готово|Отмена", "en": "Next|Back|Finish|Cancel"},
+    "wz_auto": {"uk": "Авто: {x}", "ru": "Авто: {x}", "en": "Auto: {x}"},
+    "wz_nodock": {"uk": "Без дока", "ru": "Без дока", "en": "No dock"},
+    "s_follow": {"uk": "Світла/темна тема разом із системою", "ru": "Светлая/тёмная тема вместе с системой",
+                 "en": "Light/dark theme follows the system"},
+    "s_plug": {"uk": "Анімація штекера при під'єднанні (тест)", "ru": "Анимация штекера при подключении (тест)",
+               "en": "Plug animation on connect (test)"},
+    "m_update": {"uk": "⬆ Перевірити оновлення", "ru": "⬆ Проверить обновления", "en": "⬆ Check for updates"},
+    "up_none": {"uk": "Встановлено найновішу версію ({v}).", "ru": "Установлена последняя версия ({v}).",
+                "en": "You have the latest version ({v})."},
+    "up_git": {"uk": "Є оновлення: {n} змін. Оновити й перезапустити?", "ru": "Есть обновление: {n} изменений. Обновить и перезапустить?",
+               "en": "Update available: {n} changes. Update and restart?"},
+    "up_rel": {"uk": "Вийшла версія {v} (у вас {c}). Відкрити сторінку завантаження?",
+               "ru": "Вышла версия {v} (у вас {c}). Открыть страницу загрузки?",
+               "en": "Version {v} is out (you have {c}). Open the download page?"},
+    "up_fail": {"uk": "Не вдалося перевірити оновлення: {e}", "ru": "Не удалось проверить обновления: {e}",
+                "en": "Could not check for updates: {e}"},
+    "top_view": {"uk": "Вигляд згори", "ru": "Вид сверху", "en": "Top view"},
+    "top_title": {"uk": "Вигляд згори · порти по боках, док ззаду", "ru": "Вид сверху · порты по бокам, док сзади",
+                  "en": "Top view · ports on the sides, dock at the back"},
     "usb_slow": {"uk": "⚠ USB 3 працює як USB 2 (порт або кабель)", "ru": "⚠ USB 3 работает как USB 2 (порт или кабель)",
                  "en": "⚠ USB 3 device running at USB 2 speed (port or cable)"},
     "al_slow": {"uk": "{x}: працює на швидкості USB 2 — спробуйте інший порт або кабель",
@@ -295,6 +332,8 @@ def load_config():
     cfg.setdefault("seen", {})        # "vid:pid:serial" -> имя от производителя (для окна настроек)
     cfg.setdefault("sound", True)
     cfg.setdefault("alerts", True)
+    cfg.setdefault("follow_system", False)
+    cfg.setdefault("plug_anim", False)
     cfg.setdefault("alert_temp", 90)
     cfg.setdefault("theme", "auto")
     cfg.setdefault("ui_scale", 1.0)
@@ -1482,6 +1521,50 @@ def maker_of(laptop):
     return next((m for k, m in MAKERS if k in words), "")
 
 
+def system_dark():
+    """Тёмная ли тема в системе: Qt (6.5+), KDE kdeglobals, GNOME gsettings. None — неизвестно."""
+    try:
+        from PySide6.QtGui import QGuiApplication
+        from PySide6.QtCore import Qt as _Qt
+        app = QGuiApplication.instance()
+        if app is not None and hasattr(app.styleHints(), "colorScheme"):
+            cs = app.styleHints().colorScheme()
+            if cs == _Qt.ColorScheme.Dark:
+                return True
+            if cs == _Qt.ColorScheme.Light:
+                return False
+    except (ImportError, AttributeError):
+        pass
+    kg = os.path.expanduser("~/.config/kdeglobals")
+    if os.path.exists(kg):
+        m = re.search(r"^ColorScheme=(.*)$", open(kg, errors="replace").read(), re.M)
+        if m:
+            return "dark" in m.group(1).lower()
+    try:
+        out = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                             capture_output=True, text=True, timeout=2).stdout
+        if out.strip():
+            return "dark" in out
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
+def check_update():
+    """('git', n_commits) для git-копии, ('release', tag) если вышел релиз новее, ('none', VERSION). Исключение — ошибка."""
+    if os.path.isdir(os.path.join(HERE, ".git")):
+        subprocess.run(["git", "-C", HERE, "fetch", "-q", "origin"], check=True, timeout=30, capture_output=True)
+        n = subprocess.run(["git", "-C", HERE, "rev-list", "--count", "HEAD..@{u}"], check=True, timeout=10,
+                           capture_output=True, text=True).stdout.strip()
+        return ("git", int(n)) if n.isdigit() and int(n) > 0 else ("none", VERSION)
+    import urllib.request
+    req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases/latest", headers={"User-Agent": "dockwatch"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        tag = json.load(r).get("tag_name", "").lstrip("v")
+    newer = tuple(int(x) for x in re.findall(r"\d+", tag)) > tuple(int(x) for x in re.findall(r"\d+", VERSION))
+    return ("release", tag) if tag and newer else ("none", VERSION)
+
+
 def dock_compat(dock, laptop, docked):
     """Подходит ли док к ноутбуку: механические доки — по разъёму и списку моделей, USB-C — по наличию USB-C."""
     if not dock or not laptop or docked:
@@ -1906,6 +1989,12 @@ def qt_app(mode):
     def resolve_theme(cfg=None):
         cfg = cfg or load_config()
         t = cfg.get("theme", "auto")
+        if cfg.get("follow_system"):  # светлая система — светлая тема; тёмная — тема фирмы (или выбранная тёмная)
+            dark = system_dark()
+            if dark is False:
+                return "light"
+            if dark and t == "light":
+                t = "auto"
         if t in THEMES:
             return t
         d, l = detect_profiles(cfg, usb_devices())  # «авто»: тема по ноутбуку (или доку)
@@ -1957,6 +2046,9 @@ def qt_app(mode):
             self.logos = {n: asset(f"{n}.png") for n in ("thinkpad", "ibm", "lenovo")}
             self.hist = {}
             self.editing = False
+            self.topview = False  # вид сверху (по кнопке)
+            self.plug_anim = False
+            self.top_hover = False
             self.cal = None      # калибровка в окне: {"queue": [pid…], "i": n, "before": {usb names}, "bound": n}
             self.gear_hover = False
             self.drag = None
@@ -1972,6 +2064,7 @@ def qt_app(mode):
             if self.editing:
                 return
             self.s = s
+            self.plug_anim = bool(load_config().get("plug_anim"))
             from collections import deque
             for pid, pt in s["ports"].items():
                 if pt["busy"]:
@@ -1993,7 +2086,7 @@ def qt_app(mode):
             if not load_config().get("animations", True):
                 return False
             now = time.monotonic()
-            return bool(self.cal) or any(now - t < 0.8 for t in self.lit.values())
+            return bool(self.cal) or any(now - t < 1.1 for t in self.lit.values())
 
         def connector(self, q, kind, c, busy, k=1.0, pid=None):
             fade = 1.0
@@ -2092,6 +2185,106 @@ def qt_app(mode):
                 for lx, on, col in ((-13, busy, QColor("#3ddc84")), (13, busy and self.blink, QColor("#ffb020"))):
                     q.setPen(Qt.NoPen); q.setBrush(col if on else LED_OFF); q.drawRect(QRectF(lx - 3, -19, 6, 3))
             q.restore()
+
+        def plug(self, q, c, kz, dt, kind):
+            """Тест: штекер с кабелем въезжает сверху в разъём и растворяется."""
+            if dt > 1.1:
+                return
+            t = min(1.0, dt / 0.55)
+            e = 1 - (1 - t) ** 3  # ease-out
+            alpha = 1.0 if dt < 0.75 else max(0.0, 1 - (dt - 0.75) / 0.35)
+            w = {"usbc": 16, "hdmi": 26, "dp": 24, "vga": 34, "rj45": 22, "audio": 8, "dc": 12}.get(kind, 20) * kz
+            hgt = 14 * kz
+            top = c.y() - hgt / 2 - (1 - e) * 46 * kz
+            q.save(); q.setOpacity(alpha)
+            q.setPen(QPen(QColor(30, 30, 32), 4 * kz, Qt.SolidLine, Qt.RoundCap))
+            q.drawLine(QPointF(c.x(), top - 60 * kz), QPointF(c.x(), top))
+            q.setPen(QPen(QColor(90, 90, 95), 1)); q.setBrush(QColor(55, 55, 58))
+            q.drawRoundedRect(QRectF(c.x() - w / 2 - 3 * kz, top - 10 * kz, w + 6 * kz, 12 * kz), 3, 3)  # корпус штекера
+            q.setBrush(QColor(170, 170, 176)); q.drawRect(QRectF(c.x() - w / 2, top, w, hgt))          # металлический язычок
+            q.restore()
+
+        def top_view(self, q, y, W, kz):
+            """Вид сверху: ноутбук с клавиатурой, порты по бокам (по своим местам), док — полосой сзади."""
+            lw, lh = 430 * kz, 270 * kz
+            dock = self.s.get("dock") if not self.s.get("dock_hidden") else None
+            x0 = (W - lw) / 2
+            y0 = y + (112 if dock else 46) * kz
+            q.setFont(font(13, italic=True)); q.setPen(DIM)
+            q.drawText(QPointF(28, y + 12), tr("top_title"))
+
+            def mark(px, py, vertical, pt, label_side, lift=0):
+                busy = pt["busy"]
+                w, h = (8 * kz, 22 * kz) if vertical else (22 * kz, 8 * kz)
+                r = QRectF(px - w / 2, py - h / 2, w, h)
+                if busy:
+                    g = QRadialGradient(QPointF(px, py), 18 * kz); c = QColor(accent(pt["kind"])); c.setAlpha(150)
+                    g.setColorAt(0, c); c.setAlpha(0); g.setColorAt(1, c)
+                    q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawEllipse(QPointF(px, py), 18 * kz, 18 * kz)
+                q.setPen(QPen(PORT_EDGE, 1)); q.setBrush(accent(pt["kind"]) if busy else HOLE); q.drawRoundedRect(r, 2, 2)
+                q.setFont(font(10, bold=busy)); q.setPen(accent(pt["kind"]) if busy else DIM)
+                lab = pt["label"]
+                if label_side == "left":
+                    q.drawText(QRectF(px - 170 * kz, py - 8, 158 * kz, 16), Qt.AlignRight | Qt.AlignVCenter, lab)
+                elif label_side == "right":
+                    q.drawText(QRectF(px + 12 * kz, py - 8, 158 * kz, 16), Qt.AlignLeft | Qt.AlignVCenter, lab)
+                elif label_side == "up":
+                    if lift:
+                        q.setPen(QPen(LINEC, 1)); q.drawLine(QPointF(px, py - 7 * kz), QPointF(px, py - 26 * kz))
+                        q.setPen(accent(pt["kind"]) if busy else DIM)
+                    q.drawText(QRectF(px - 40, py - (26 + lift) * kz, 80, 14), Qt.AlignCenter, lab)
+                else:
+                    q.drawText(QRectF(px - 40, py + 10 * kz, 80, 14), Qt.AlignCenter, lab)
+                self.rects[pt["id"]] = r.adjusted(-8, -8, 8, 8)
+
+            # док сзади: задняя панель смотрит назад, поэтому сверху её порядок зеркальный
+            if dock:
+                dr = QRectF(x0 - 90 * kz, y0 - 50 * kz, lw + 180 * kz, 30 * kz)
+                q.setPen(QPen(EDGE, 1.2)); q.setBrush(BODY_LO); q.drawRoundedRect(dr, 6, 6)
+                dps = sorted((pt for pt in self.s["ports"].values() if pt["owner"] == "dock"), key=lambda p_: -p_["x"])
+                for i, pt in enumerate(dps):  # подписи вплотную стоящих разъёмов — в два яруса
+                    mark(dr.left() + dr.width() * (1 - pt["x"]), dr.top(), False, pt, "up", 16 if i % 2 else 0)
+            # корпус и клавиатура
+            body = QRectF(x0, y0, lw, lh)
+            grad = QLinearGradient(body.topLeft(), body.bottomLeft())
+            grad.setColorAt(0, BODY_HI); grad.setColorAt(0.1, BODY); grad.setColorAt(1, BODY_LO)
+            q.setPen(QPen(EDGE, 1.5)); q.setBrush(QBrush(grad)); q.drawRoundedRect(body, 14, 14)
+            kb = QRectF(x0 + lw * 0.08, y0 + lh * 0.12, lw * 0.84, lh * 0.46)
+            cols, rows_ = 14, 6
+            kw, kh = kb.width() / cols, kb.height() / rows_
+            q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(KEYC)
+            for i in range(rows_):
+                for j in range(cols):
+                    if i == rows_ - 1 and 3 < j < 10:
+                        if j == 4:  # пробел
+                            q.drawRoundedRect(QRectF(kb.left() + j * kw + 1, kb.top() + i * kh + 1, kw * 6 - 2, kh - 2), 2, 2)
+                        continue
+                    q.drawRoundedRect(QRectF(kb.left() + j * kw + 1, kb.top() + i * kh + 1, kw - 2, kh - 2), 2, 2)
+            tp = QRectF(x0 + lw * 0.36, y0 + lh * 0.65, lw * 0.28, lh * 0.27)
+            q.setBrush(BODY_HI); q.drawRoundedRect(tp, 6, 6)
+            lap = self.s.get("laptop") or {}
+            if lap.get("brand", "ThinkPad") == "ThinkPad":  # трекпойнт
+                q.setPen(Qt.NoPen); q.setBrush(RED)
+                q.drawEllipse(QPointF(kb.center().x(), kb.top() + kh * 3.9), 4 * kz, 4 * kz)
+            # порты ноутбука по бокам: левый бок — сзади наперёд сверху вниз, правый — наоборот (как смотреть с боку)
+            side_of = {}
+            for g in self.s["groups"]:
+                gid = g["id"].lower()
+                side_of[g["id"]] = ("left" if "left" in gid else "right" if "right" in gid else
+                                    "rear" if ("rear" in gid or "back" in gid) else "front" if "front" in gid else None)
+            for pt in self.s["ports"].values():
+                if pt["owner"] != "laptop":
+                    continue
+                sd = side_of.get(pt["g"])
+                if sd == "left":
+                    mark(x0, y0 + lh * (0.08 + 0.84 * pt["x"]), True, pt, "left")
+                elif sd == "right":
+                    mark(x0 + lw, y0 + lh * (0.08 + 0.84 * (1 - pt["x"])), True, pt, "right")
+                elif sd == "rear":
+                    mark(x0 + lw * (1 - pt["x"]), y0, False, pt, "up")
+                elif sd == "front":
+                    mark(x0 + lw * pt["x"], y0 + lh, False, pt, "down")
+            return y0 + lh + 40 * kz
 
         def tower(self, q, r):
             q.setPen(QPen(EDGE, 1.5)); q.setBrush(BODY_LO); q.drawRoundedRect(r, 6, 6)
@@ -2320,7 +2513,9 @@ def qt_app(mode):
             # корпуса во всю ширину, но тонкие (по высоте — впритык к разъёмам); на широком окне разъёмы крупнее
             CW, off = W, 0.0
             kz = min(1.45, max(1.0, W / BASE_W))
-            for row in rows_of([g for g in self.s["groups"] if not g.get("bezel")]):
+            if self.topview:
+                y = self.top_view(q, y, W, kz)
+            for row in ([] if self.topview else rows_of([g for g in self.s["groups"] if not g.get("bezel")])):
                 h = 26 + 32 * kz
                 tower_w = 84 * (1 + (kz - 1) * 0.5) if any(g.get("tower") for g in row) else 0
                 gap = 14
@@ -2344,6 +2539,8 @@ def qt_app(mode):
                         cx, cy = r.left() + r.width() * pt["x"], r.center().y() + 3
                         busy = pt["busy"]
                         self.connector(q, pt["kind"], QPointF(cx, cy), busy, kz, pt["id"])
+                        if busy and self.plug_anim and pt["id"] in self.lit:
+                            self.plug(q, QPointF(cx, cy), kz, time.monotonic() - self.lit[pt["id"]], pt["kind"])
                         q.setFont(font(10)); q.setPen(INK)
                         q.drawText(QRectF(cx - 40, r.top() + 3, 80, 14), Qt.AlignCenter, pt.get("mark", ""))
                         q.setFont(font(11, bold=busy)); q.setPen(accent(pt["kind"]) if busy else DIM)
@@ -2438,6 +2635,14 @@ def qt_app(mode):
             q.setPen(QPen(EDGE, 1.2)); q.setBrush(KEYC); q.drawRoundedRect(self.gear, 7, 7)
             f_ = font(19); q.setFont(f_); q.setPen(TXT if self.gear_hover else DIM)
             q.drawText(self.gear, Qt.AlignCenter, "⚙")
+            # кнопка «вид сверху»: значок — ноутбук сверху
+            self.topbtn = QRectF(W - 100, fy - 60, 34, 34)
+            q.setPen(QPen(LED_ON if self.topview else EDGE, 1.2)); q.setBrush(KEYC); q.drawRoundedRect(self.topbtn, 7, 7)
+            ic = self.topbtn.adjusted(9, 9, -9, -9)
+            q.setPen(QPen(TXT if (self.top_hover or self.topview) else DIM, 1.4)); q.setBrush(Qt.NoBrush)
+            q.drawRoundedRect(ic, 2, 2)
+            q.drawRect(QRectF(ic.left() + 3, ic.top() + 3, ic.width() - 6, ic.height() * 0.4))
+            q.drawRect(QRectF(ic.center().x() - 3, ic.bottom() - 6, 6, 4))
             o = self.s.get("os") or {}
             if o:  # система: логотип дистрибутива + название, ядро, рабочий стол
                 if not hasattr(self, "os_icon"):
@@ -2558,6 +2763,12 @@ def qt_app(mode):
             if e.button() == Qt.LeftButton and getattr(self, "gear", None) is not None and self.gear.contains(pos):
                 settings()
                 return
+            if e.button() == Qt.LeftButton and getattr(self, "topbtn", None) is not None and self.topbtn.contains(pos):
+                self.topview = not self.topview
+                if self.topview and self.editing:
+                    toggle_edit(False)
+                self.update()
+                return
             if not self.editing or e.button() != Qt.LeftButton:
                 return
             self.drag = next((k for k, r in self.rects.items() if r.contains(pos)), None)
@@ -2581,12 +2792,13 @@ def qt_app(mode):
         def mouseMoveEvent(self, e):
             pos = e.position() / self.scale
             hov = getattr(self, "gear", None) is not None and self.gear.contains(pos)
-            if hov != self.gear_hover:
-                self.gear_hover = hov
-                self.setCursor(Qt.PointingHandCursor if hov else Qt.ArrowCursor)
+            thov = getattr(self, "topbtn", None) is not None and self.topbtn.contains(pos)
+            if hov != self.gear_hover or thov != self.top_hover:
+                self.gear_hover, self.top_hover = hov, thov
+                self.setCursor(Qt.PointingHandCursor if (hov or thov) else Qt.ArrowCursor)
                 self.update()
-            if hov:
-                self.setToolTip(tr("m_settings").rstrip("…"))
+            if hov or thov:
+                self.setToolTip(tr("m_settings").rstrip("…") if hov else tr("top_view"))
                 return
             if self.editing and getattr(self, "drag", None):
                 pt = self.s["ports"][self.drag]
@@ -2692,7 +2904,8 @@ def qt_app(mode):
         scale = QDoubleSpinBox(); scale.setRange(0.8, 1.6); scale.setSingleStep(0.05); scale.setValue(float(cfg.get("ui_scale", 1.0)))
         form.addRow(tr("m_lang"), lang); form.addRow(tr("s_theme"), theme); form.addRow(tr("s_scale"), scale)
         checks = {}
-        opts = [("show_stats", "m_stats"), ("hide_dock", "m_hidedock"), ("sound", "s_sound"), ("animations", "s_anim")]
+        opts = [("show_stats", "m_stats"), ("hide_dock", "m_hidedock"), ("sound", "s_sound"), ("animations", "s_anim"),
+                ("follow_system", "s_follow"), ("plug_anim", "s_plug")]
         if lid_dot_writable():
             opts += [("lid_blink", "m_lid"), ("lid_on", "m_lid_on")]
         for opt, key in opts:
@@ -2788,6 +3001,75 @@ def qt_app(mode):
         view.log.insert(0, time.strftime("%H:%M:%S  ") + tr("cal_bound", p=s["ports"][pid]["label"]))
         cal_next()
 
+    def wizard():
+        """Мастер первого запуска: язык, тема, ноутбук и док, автозапуск, калибровка."""
+        from PySide6.QtWidgets import QWizard, QWizardPage
+        cfg = load_config()
+        wz = QWizard(view); wz.setWindowTitle(tr("wz_title")); wz.setWizardStyle(QWizard.ModernStyle)
+        for b, t in zip((QWizard.NextButton, QWizard.BackButton, QWizard.FinishButton, QWizard.CancelButton), tr("wz_buttons").split("|")):
+            wz.setButtonText(b, t)
+        # 1. язык
+        p1 = QWizardPage(); p1.setTitle("DockWatch"); p1.setSubTitle(tr("wz_hello")); f1 = QFormLayout(p1)
+        lang = QComboBox(); [lang.addItem(n, c) for c, n in (("uk", "Українська"), ("ru", "Русский"), ("en", "English"))]
+        lang.setCurrentIndex(LANGS.index(LANG)); f1.addRow(tr("m_lang"), lang)
+        # 2. вид
+        p2 = QWizardPage(); p2.setTitle(tr("wz_look")); f2 = QFormLayout(p2)
+        theme = QComboBox(); [theme.addItem(tr(f"theme_{t}"), t) for t in ("auto", *THEMES)]
+        theme.setCurrentIndex(max(0, ["auto", *THEMES].index(cfg.get("theme", "auto")) if cfg.get("theme") in ("auto", *THEMES) else 0))
+        f2.addRow(tr("s_theme"), theme)
+        follow = QCheckBox(tr("s_follow")); follow.setChecked(bool(cfg.get("follow_system"))); f2.addRow(follow)
+        # 3. железо
+        p3 = QWizardPage(); p3.setTitle(tr("wz_hw")); p3.setSubTitle(tr("wz_hw_sub")); f3 = QFormLayout(p3)
+        d_auto, l_auto = detect_profiles(cfg, usb_devices())
+        lap = QComboBox(); lap.addItem(tr("wz_auto", x=(l_auto or generic_profile())["name"]), "auto")
+        for pr in sorted(load_profiles("laptops"), key=lambda x: x["name"]):
+            lap.addItem(pr["name"], pr["id"])
+        lap.setCurrentIndex(max(0, lap.findData(cfg.get("laptop_choice", "auto"))))
+        dk = QComboBox(); dk.addItem(tr("wz_auto", x=d_auto["name"] if d_auto else "—"), "auto"); dk.addItem(tr("wz_nodock"), "none")
+        for pr in sorted(load_profiles("docks"), key=lambda x: x["name"]):
+            dk.addItem(pr["name"], pr["id"])
+        dk.setCurrentIndex(max(0, dk.findData(cfg.get("dock_choice", "auto"))))
+        f3.addRow(tr("laptop"), lap); f3.addRow(tr("dock"), dk)
+        # 4. готово
+        p4 = QWizardPage(); p4.setTitle(tr("wz_done")); f4 = QFormLayout(p4)
+        auto = QCheckBox(tr("m_autostart")); auto.setChecked(autostart() or not cfg.get("setup_done")); f4.addRow(auto)
+        al = QCheckBox(tr("s_alerts")); al.setChecked(bool(cfg.get("alerts", True))); f4.addRow(al)
+        cal = QCheckBox(tr("wz_cal")); cal.setChecked(not cfg.get("calibrated")); f4.addRow(cal)
+        for pg in (p1, p2, p3, p4):
+            wz.addPage(pg)
+        ok = wz.exec() == QDialog.Accepted
+        cfg = load_config()
+        cfg["setup_done"] = True
+        if ok:
+            cfg.update(theme=theme.currentData(), follow_system=follow.isChecked(), laptop_choice=lap.currentData(),
+                       dock_choice=dk.currentData(), alerts=al.isChecked())
+        save_config(cfg)
+        if not ok:
+            return
+        autostart(auto.isChecked())
+        apply_theme(resolve_theme(cfg)); view.bg = None
+        apply(lang=lang.currentData())
+        if cal.isChecked():
+            QTimer.singleShot(300, cal_start)
+
+    def check_updates_ui():
+        try:
+            kind, val = check_update()
+        except Exception as e:  # сеть, git, GitHub API — показываем как есть
+            QMessageBox.warning(view, "DockWatch", tr("up_fail", e=e))
+            return
+        if kind == "none":
+            QMessageBox.information(view, "DockWatch", tr("up_none", v=VERSION))
+        elif kind == "git":
+            if QMessageBox.question(view, "DockWatch", tr("up_git", n=val)) == QMessageBox.Yes:
+                r = subprocess.run(["git", "-C", HERE, "pull", "--ff-only", "-q"], capture_output=True, text=True)
+                if r.returncode:
+                    QMessageBox.warning(view, "DockWatch", tr("up_fail", e=r.stderr.strip()))
+                    return
+                os.execv(sys.executable, [sys.executable, os.path.realpath(__file__), *sys.argv[1:]])
+        elif QMessageBox.question(view, "DockWatch", tr("up_rel", v=val, c=VERSION)) == QMessageBox.Yes:
+            subprocess.Popen(["xdg-open", f"https://github.com/{REPO}/releases/latest"], stderr=subprocess.DEVNULL)
+
     def make_report_ui():
         path = make_report(quiet=True)
         QMessageBox.information(view, "DockWatch", tr("report_saved", x=path))
@@ -2852,6 +3134,9 @@ def qt_app(mode):
             tray.setToolTip(f"dockwatch · {tr('docked') if s['docked'] else tr('undocked')} · {tr('busy', n=s['busy'], m=s['total'])}")
             for e in ev[:3]:
                 tray.showMessage("dockwatch", e, QSystemTrayIcon.Information, 4000)
+        if s["ts"] - state.get("theme_ts", 0) > 10:
+            state["theme_ts"] = s["ts"]
+            theme_sync()
         if s["ts"] - state.get("prof_ts", 0) > 10:
             view.profile = power_profile()
             state["prof_ts"] = s["ts"]
@@ -2880,6 +3165,8 @@ def qt_app(mode):
         plugin_call("menu", lambda title, fn: menu.addAction(title, fn), ctx)
         menu.addAction(tr("m_tui"), lambda: run_in_terminal("tui"))
         menu.addAction(tr("m_cal"), cal_start)
+        menu.addAction(tr("m_wizard"), wizard)
+        menu.addAction(tr("m_update"), check_updates_ui)
         menu.addAction(tr("m_report"), make_report_ui)
         menu.addSeparator()
         for key, opt in (("m_stats", "show_stats"), ("m_hidedock", "hide_dock")):
@@ -2972,13 +3259,31 @@ def qt_app(mode):
         if mode == "app":
             show_view()
 
+    def theme_sync(*_):
+        if load_config().get("follow_system"):
+            t = resolve_theme()
+            if t != THEME["name"]:
+                apply_theme(t); view.bg = None; view.update()
+    theme_sync()
+    try:
+        app.styleHints().colorSchemeChanged.connect(theme_sync)
+    except AttributeError:  # Qt < 6.5 — только опрос в tick
+        pass
+    if not os.environ.get("DOCKWATCH_SCREENSHOT"):
+        cfg0 = load_config()
+        if not cfg0.get("setup_done"):
+            if cfg0.get("usb") or cfg0.get("seen"):  # уже пользуются — мастер не навязываем
+                cfg0["setup_done"] = True; save_config(cfg0)
+            else:
+                QTimer.singleShot(600, wizard)
+
     def anim_tick():
         if view.isVisible() and view.animating():
             view.update()
         else:
             view.anim_t = time.monotonic()
 
-    ctx.update({"view": view, "tray": lambda: tray, "calibrate": cal_start, "report": make_report, "app": app, "notify": notify,
+    ctx.update({"view": view, "tray": lambda: tray, "calibrate": cal_start, "report": make_report, "wizard": wizard, "app": app, "notify": notify,
                 "QtWidgets": __import__("PySide6.QtWidgets", fromlist=["x"]), "QtGui": __import__("PySide6.QtGui", fromlist=["x"]), "Qt": Qt})
     plugin_call("on_start", ctx)
     anim = QTimer()

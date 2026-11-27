@@ -48,7 +48,10 @@ Screenshots in other languages: [українська](docs/screenshot-uk.png) �
   card reader, camera) and picks the brand theme; `dockwatch make-profile` saves it as JSON to refine.
 - **Layout editor** (menu → *Edit layout*): drag ports along a side or to another side, right-click to change the type,
   rename, add or delete; saved to `~/.config/dockwatch/profiles`.
-- Settings button (⚙) in the bottom-right corner of the window.
+- Settings button (⚙) in the bottom-right corner of the window, and next to it the **top view** button: the whole laptop
+  from above with its keyboard, ports on their real sides and the dock behind it.
+- Light/dark theme can follow the system (KDE, GNOME, Qt colour scheme).
+- Plug animation on connect (experimental, off by default).
 - Smooth glow when a port lights up, a short chime on plug/unplug (can be turned off).
 - **Plasma 6 panel widget**: dock icon with the number of busy ports, click for the list (installed by `install.sh`;
   right-click the panel → Add Widgets → DockWatch).
@@ -75,6 +78,13 @@ git clone https://github.com/Watashik/DockWatch && cd DockWatch
 sudo ./install-root.sh     # optional: allow blinking the ThinkPad lid dot
 ```
 Arch/CachyOS: an AUR `PKGBUILD` is in `packaging/aur/`.
+
+Packages: every release on GitHub has a `.deb` (Debian 13+, Ubuntu 24.04+) and an `.rpm` (Fedora 40+);
+build them yourself with `sh packaging/debian/build-deb.sh` or `sh packaging/fedora/build-rpm.sh`.
+
+On the first start a **setup wizard** asks for language, theme, your laptop and dock, autostart and offers calibration
+(menu → *Setup wizard* to run it again). Menu → *Check for updates*: a git checkout updates itself and restarts,
+a package install opens the latest release.
 
 Fedora:
 ```sh
