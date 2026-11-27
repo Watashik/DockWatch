@@ -2047,6 +2047,8 @@ def qt_app(mode):
             self.hist = {}
             self.editing = False
             self.topview = False  # вид сверху (по кнопке)
+            self.kb_down, self.kb_up, self.kb_keys = set(), {}, {}  # нажатые клавиши (коды evdev) для вида сверху
+            self.flash = (None, 0.0)  # какая кнопка окна только что нажата (для отклика)
             self.plug_anim = False
             self.top_hover = False
             self.cal = None      # калибровка в окне: {"queue": [pid…], "i": n, "before": {usb names}, "bound": n}
@@ -2086,7 +2088,8 @@ def qt_app(mode):
             if not load_config().get("animations", True):
                 return False
             now = time.monotonic()
-            return bool(self.cal) or any(now - t < 1.3 for t in self.lit.values())
+            return bool(self.cal) or any(now - t < 1.3 for t in self.lit.values()) or \
+                any(now - t < 0.2 for t in self.kb_up.values()) or now - self.flash[1] < 0.2
 
         def connector(self, q, kind, c, busy, k=1.0, pid=None):
             fade = 1.0
@@ -2302,25 +2305,48 @@ def qt_app(mode):
             u = kb.width() / 15.0
             rh = kb.height() / 5.6           # обычный ряд; ряд F-клавиш — 0.6
             gap = 1.6 * kz
-            q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(KEYC)
+            self.kb_keys = {}
+            now = time.monotonic()
 
-            def key(xu, yy, wu, hh):
-                q.drawRoundedRect(QRectF(kb.left() + xu * u + gap / 2, yy + gap / 2, wu * u - gap, hh - gap), 2.5, 2.5)
+            def key(xu, yy, wu, hh, lab="", code=None):
+                r = QRectF(kb.left() + xu * u + gap / 2, yy + gap / 2, wu * u - gap, hh - gap)
+                down = code is not None and (code in self.kb_down or now - self.kb_up.get(code, -9) < 0.18)
+                if down:  # нажата: подсветка цветом темы и «утоплена» на пиксель
+                    g_ = QRadialGradient(r.center(), r.width()); c_ = QColor(RED); c_.setAlpha(120); g_.setColorAt(0, c_)
+                    c_.setAlpha(0); g_.setColorAt(1, c_); q.setPen(Qt.NoPen); q.setBrush(QBrush(g_))
+                    q.drawRoundedRect(r.adjusted(-5, -5, 5, 5), 6, 6)
+                    r = r.translated(0, 1)
+                q.setPen(QPen(RED if down else KEY_EDGE, 1)); q.setBrush(RED.darker(160) if down else KEYC)
+                q.drawRoundedRect(r, 2.5, 2.5)
+                if lab and r.width() > 9:
+                    q.setFont(font(max(6, int(7 * kz)))); q.setPen(TXT if down else DIM)
+                    q.drawText(r.adjusted(2, 0, -1, 0), Qt.AlignLeft | Qt.AlignVCenter if len(lab) > 2 else Qt.AlignCenter, lab)
+                if code is not None:
+                    self.kb_keys[code] = r
             yy = kb.top()
-            for i in range(17):  # Esc, F1–F12, Home, End, Insert, Delete
-                key(i * 15 / 17, yy, 15 / 17, rh * 0.6)
+            frow = [("Esc", 1)] + [(f"F{i}", c) for i, c in zip(range(1, 13), (59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 87, 88))] + \
+                [("Hm", 102), ("End", 107), ("Ins", 110), ("Del", 111)]
+            for i, (lab, code) in enumerate(frow):  # Esc, F1–F12, Home, End, Insert, Delete
+                key(i * 15 / 17, yy, 15 / 17, rh * 0.6, lab, code)
             yy += rh * 0.6
-            rows_u = [[1] * 13 + [2], [1.5] + [1] * 12 + [1.5], [1.75] + [1] * 11 + [2.25], [2.25] + [1] * 10 + [2.75]]
-            for row_ in rows_u:
+            # коды evdev (не зависят от раскладки): ряды как на L14
+            rows_k = [
+                [("`", 41, 1)] + [(str((i + 1) % 10), 2 + i, 1) for i in range(10)] + [("-", 12, 1), ("=", 13, 1), ("⌫", 14, 2)],
+                [("Tab", 15, 1.5)] + [(ch, 16 + i, 1) for i, ch in enumerate("QWERTYUIOP")] + [("[", 26, 1), ("]", 27, 1), ("\\", 43, 1.5)],
+                [("Caps", 58, 1.75)] + [(ch, 30 + i, 1) for i, ch in enumerate("ASDFGHJKL")] + [(";", 39, 1), ("'", 40, 1), ("Enter", 28, 2.25)],
+                [("Shift", 42, 2.25)] + [(ch, c, 1) for ch, c in zip("ZXCVBNM,./", (44, 45, 46, 47, 48, 49, 50, 51, 52, 53))] + [("Shift", 54, 2.75)],
+            ]
+            for row_ in rows_k:
                 xu = 0
-                for wu in row_:
-                    key(xu, yy, wu, rh); xu += wu
+                for lab, code, wu in row_:
+                    key(xu, yy, wu, rh, lab, code); xu += wu
                 yy += rh
             xu = 0
-            for wu in (1, 1, 1, 1, 5, 1, 1, 1):  # Fn Ctrl Win Alt Space Alt PrtSc Ctrl
-                key(xu, yy, wu, rh); xu += wu
-            for j in range(3):  # PgUp ↑ PgDn / ← ↓ →
-                key(xu + j, yy, 1, rh / 2); key(xu + j, yy + rh / 2, 1, rh / 2)
+            for lab, code, wu in (("Fn", None, 1), ("Ctrl", 29, 1), ("⊞", 125, 1), ("Alt", 56, 1), ("", 57, 5), ("Alt", 100, 1),
+                                  ("Prt", 99, 1), ("Ctrl", 97, 1)):
+                key(xu, yy, wu, rh, lab, code); xu += wu
+            for j, (top_k, bot_k) in enumerate(((("PU", 104), ("←", 105)), (("↑", 103), ("↓", 108)), (("PD", 109), ("→", 106)))):
+                key(xu + j, yy, 1, rh / 2, *top_k); key(xu + j, yy + rh / 2, 1, rh / 2, *bot_k)
             kb_bottom = yy + rh
             if tp_style:  # трекпойнт между G, H и B
                 tpx = kb.left() + 6.75 * u
@@ -2720,12 +2746,16 @@ def qt_app(mode):
                        (self.s.get("laptop") or {}).get("footer") or "Technologies and Design")
             # кнопка настроек справа снизу
             self.gear = QRectF(W - 58, fy - 60, 34, 34)
-            q.setPen(QPen(EDGE, 1.2)); q.setBrush(KEYC); q.drawRoundedRect(self.gear, 7, 7)
+            fl = self.flash[0] if time.monotonic() - self.flash[1] < 0.2 else None
+            q.setPen(QPen(RED if fl == "gear" else EDGE, 1.2)); q.setBrush(KEYC.darker(140) if fl == "gear" else KEYC)
+            q.drawRoundedRect(self.gear.translated(0, 1) if fl == "gear" else self.gear, 7, 7)
             f_ = font(19); q.setFont(f_); q.setPen(TXT if self.gear_hover else DIM)
             q.drawText(self.gear, Qt.AlignCenter, "⚙")
             # кнопка «вид сверху»: значок — ноутбук сверху
             self.topbtn = QRectF(W - 100, fy - 60, 34, 34)
-            q.setPen(QPen(LED_ON if self.topview else EDGE, 1.2)); q.setBrush(KEYC); q.drawRoundedRect(self.topbtn, 7, 7)
+            q.setPen(QPen(RED if fl == "top" else LED_ON if self.topview else EDGE, 1.2))
+            q.setBrush(KEYC.darker(140) if fl == "top" else KEYC)
+            q.drawRoundedRect(self.topbtn.translated(0, 1) if fl == "top" else self.topbtn, 7, 7)
             ic = self.topbtn.adjusted(9, 9, -9, -9)
             q.setPen(QPen(TXT if (self.top_hover or self.topview) else DIM, 1.4)); q.setBrush(Qt.NoBrush)
             q.drawRoundedRect(ic, 2, 2)
@@ -2834,7 +2864,27 @@ def qt_app(mode):
         def group_at(self, pos):
             return next((gid for gid, (r, _) in self.grects.items() if r.adjusted(-6, -24, 6, 24).contains(pos)), None)
 
+        def focusOutEvent(self, e):
+            self.kb_down.clear(); self.update()
+            super().focusOutEvent(e)
+
+        def kb_code(self, e):
+            sc = e.nativeScanCode()
+            return sc - 8 if sc > 8 else None  # xkb-код = evdev + 8
+
+        def keyReleaseEvent(self, e):
+            if self.topview and not e.isAutoRepeat():
+                c = self.kb_code(e)
+                if c is not None:
+                    self.kb_down.discard(c); self.kb_up[c] = time.monotonic(); self.update()
+            super().keyReleaseEvent(e)
+
         def keyPressEvent(self, e):
+            if self.topview and not self.cal:
+                c = self.kb_code(e)
+                if c is not None and not e.isAutoRepeat():
+                    self.kb_down.add(c); self.update()
+                return
             if self.cal and e.key() == Qt.Key_Escape:
                 cal_stop()
                 return
@@ -2849,10 +2899,18 @@ def qt_app(mode):
                 cal_next()
                 return
             if e.button() == Qt.LeftButton and getattr(self, "gear", None) is not None and self.gear.contains(pos):
+                self.flash = ("gear", time.monotonic()); self.repaint()
                 settings()
                 return
+            if self.topview and e.button() == Qt.LeftButton:  # клик по клавише нарисованной клавиатуры
+                hit = next((c for c, r in self.kb_keys.items() if r.contains(pos)), None)
+                if hit is not None:
+                    self.kb_up[hit] = time.monotonic(); self.update()
+                    return
             if e.button() == Qt.LeftButton and getattr(self, "topbtn", None) is not None and self.topbtn.contains(pos):
+                self.flash = ("top", time.monotonic())
                 self.topview = not self.topview
+                self.kb_down.clear()
                 if self.topview and self.editing:
                     toggle_edit(False)
                 self.update()
