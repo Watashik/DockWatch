@@ -1,0 +1,21 @@
+{
+  "id": "lenovo-thinkpad-l14-gen1",
+  "name": "ThinkPad L14 Gen 1",
+  "match": {"dmi": ["ThinkPad L14 Gen 1"]},
+  "groups": [
+    {"id": "left", "row": 1, "w": 0.6, "height": 62,
+     "title": {"uk": "ThinkPad L14 · лівий бік", "ru": "ThinkPad L14 · левый бок", "en": "ThinkPad L14 · left side"}},
+    {"id": "right", "row": 1, "w": 0.4, "height": 62, "vents": [0.46, 0.97],
+     "title": {"uk": "правий бік", "ru": "правый бок", "en": "right side"}}
+  ],
+  "ports": [
+    {"id": "l_eth", "kind": "rj45", "g": "left", "x": 0.08, "mark": "⊞", "label": "LAN", "role": "eth"},
+    {"id": "l_card", "kind": "card", "g": "left", "x": 0.25, "mark": "SD", "label": "@card"},
+    {"id": "l_hdmi", "kind": "hdmi", "g": "left", "x": 0.41, "mark": "HDMI", "label": "HDMI", "video": true, "drm": ["HDMI-A-1"]},
+    {"id": "l_usb", "kind": "usb", "g": "left", "x": 0.55, "mark": "SS⚡", "label": "USB ⚡"},
+    {"id": "l_dock", "kind": "dockport", "g": "left", "x": 0.73, "mark": "⇆", "label": "@dock", "role": "dock"},
+    {"id": "l_usbc", "kind": "usbc", "g": "left", "x": 0.91, "mark": "⎓", "label": "USB-C ⚡", "role": "power"},
+    {"id": "r_audio", "kind": "audio", "g": "right", "x": 0.13, "mark": "🎧", "label": "@audio"},
+    {"id": "r_usb", "kind": "usb", "g": "right", "x": 0.31, "mark": "SS", "label": "USB"}
+  ]
+}
