@@ -108,6 +108,21 @@ TR = {
     "pd_sink": {"uk": "🔌 заряджається · {mode} · {w}", "ru": "🔌 заряжается · {mode} · {w}", "en": "🔌 charging · {mode} · {w}"},
     "rpm": {"uk": "об/хв", "ru": "об/мин", "en": "RPM"},
     "fan_off": {"uk": "вентилятор стоїть", "ru": "вентилятор стоит", "en": "fan stopped"},
+    "mic": {"uk": "Мікрофон", "ru": "Микрофон", "en": "Microphone"},
+    "cam": {"uk": "Камера", "ru": "Камера", "en": "Camera"},
+    "spk": {"uk": "Звук", "ru": "Звук", "en": "Sound"},
+    "muted": {"uk": "вимкнено", "ru": "выключен", "en": "muted"},
+    "on": {"uk": "увімкнено", "ru": "включён", "en": "on"},
+    "recording": {"uk": "пише: {x}", "ru": "пишет: {x}", "en": "recording: {x}"},
+    "cam_free": {"uk": "не використовується", "ru": "не используется", "en": "not in use"},
+    "cam_busy": {"uk": "увімкнена: {x}", "ru": "включена: {x}", "en": "in use: {x}"},
+    "cam_none": {"uk": "немає", "ru": "нет", "en": "none"},
+    "shutter": {"uk": "шторка ThinkShutter системою не визначається", "ru": "шторка ThinkShutter системой не определяется",
+                "en": "the ThinkShutter cover is not visible to the OS"},
+    "bezel": {"uk": "рамка екрана", "ru": "рамка экрана", "en": "display bezel"},
+    "headphones": {"uk": "🎧 навушники", "ru": "🎧 наушники", "en": "🎧 headphones"},
+    "headset": {"uk": "🎧 гарнітура (з мікрофоном)", "ru": "🎧 гарнитура (с микрофоном)", "en": "🎧 headset (with mic)"},
+    "sd_card": {"uk": "💾 картка {size}", "ru": "💾 карта {size}", "en": "💾 card {size}"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
@@ -449,6 +464,99 @@ def typec_info(port):
     return tr("pd_sink", mode=mode or "USB-C", w=w).rstrip(" ·")
 
 
+def _pactl_json(*args):
+    try:
+        out = subprocess.run(["pactl", "-f", "json", *args], capture_output=True, text=True, timeout=2).stdout
+        return json.loads(out) if out.strip() else None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def media_state():
+    """Микрофон и звук (PipeWire/PulseAudio, светодиоды F1/F4 ThinkPad) и камера (кто открыл /dev/video*)."""
+    led = lambda n: rd(f"/sys/class/leds/{n}/brightness") == "1" if os.path.exists(f"/sys/class/leds/{n}") else None  # noqa: E731
+    m = {"mic_muted": led("platform::micmute"), "spk_muted": led("platform::mute"),
+         "mic_vol": None, "spk_vol": None, "mic_users": [], "cam_present": False, "cam_users": [], "cam_name": ""}
+    for kind, key in (("source", "mic"), ("sink", "spk")):
+        mu = _pactl_json(f"get-{kind}-mute", f"@DEFAULT_{kind.upper()}@")
+        if isinstance(mu, dict) and "mute" in mu:
+            m[f"{key}_muted"] = bool(mu["mute"])
+        vol = _pactl_json(f"get-{kind}-volume", f"@DEFAULT_{kind.upper()}@")
+        try:
+            ch = next(iter(vol["volume"].values()))
+            m[f"{key}_vol"] = int(str(ch["value_percent"]).rstrip("%"))
+        except (TypeError, KeyError, StopIteration, ValueError):
+            pass
+    srcs = {x["index"]: x["name"] for x in (_pactl_json("list", "sources") or [])}
+    for o in _pactl_json("list", "source-outputs") or []:
+        name = srcs.get(o.get("source"), "")
+        if name.endswith(".monitor") or o.get("corked"):
+            continue  # слушают выход (визуализаторы), а не микрофон, или стоят на паузе
+        pr = o.get("properties", {})
+        m["mic_users"].append(pr.get("application.name") or pr.get("application.process.binary") or pr.get("media.name") or "?")
+    cams = sorted(glob.glob("/dev/video*"))
+    m["cam_present"] = bool(cams)
+    m["cam_name"] = rd("/sys/class/video4linux/video0/name").split(":")[0]
+    users = set()
+    for fd in glob.glob("/proc/[0-9]*/fd/*"):
+        try:
+            if os.readlink(fd) in cams:
+                users.add(rd(f"/proc/{fd.split('/')[2]}/comm"))
+        except OSError:
+            pass
+    m["cam_users"] = sorted(users)
+    return m
+
+
+def media_lines(m):
+    mic = f"🎙 {tr('mic')}: " + (tr("muted") + " (F4)" if m["mic_muted"] else tr("on") + (f" · {m['mic_vol']}%" if m["mic_vol"] is not None else ""))
+    if m["mic_users"]:
+        mic += " · " + tr("recording", x=", ".join(dict.fromkeys(m["mic_users"])))
+    cam = f"📷 {tr('cam')}: " + (tr("cam_none") if not m["cam_present"] else
+                                 tr("cam_busy", x=", ".join(m["cam_users"])) if m["cam_users"] else tr("cam_free"))
+    spk = f"🔊 {tr('spk')}: " + (tr("muted") + " (F1)" if m["spk_muted"] else tr("on") + (f" · {m['spk_vol']}%" if m["spk_vol"] is not None else ""))
+    return mic, cam, spk
+
+
+def audio_jack():
+    """Что воткнуто в 3.5-мм гнездо: по доступности портов звуковой карты (наушники / микрофон гарнитуры)."""
+    hp = mic = False
+    for kind in ("sinks", "sources"):
+        for x in _pactl_json("list", kind) or []:
+            for pt in x.get("ports", []):
+                if pt.get("availability") == "available":
+                    if "headphone" in pt["name"] or "headset" in pt["name"]:
+                        hp = True
+                    if pt["name"].endswith("-mic") or "headset-mic" in pt["name"]:
+                        mic = True
+    return "headset" if hp and mic else "headphones" if hp else ""
+
+
+def sd_cards():
+    """Карты памяти в кард-ридере: размер, метка, где смонтирована, скорость чтения/записи."""
+    out = []
+    for b in sorted(glob.glob("/sys/block/mmcblk[0-9]")):
+        size = int(rd(f"{b}/size", "0") or 0) * 512
+        if not size:
+            continue
+        dev = "/dev/" + os.path.basename(b)
+        label = mnt = ""
+        try:
+            r = subprocess.run(["lsblk", "-nro", "LABEL,MOUNTPOINT", dev], capture_output=True, text=True, timeout=2).stdout
+            for line in r.splitlines():
+                parts = line.split(" ", 1)
+                label = label or parts[0].replace("\\x20", " ")
+                mnt = mnt or (parts[1].replace("\\x20", " ") if len(parts) > 1 else "")
+        except (OSError, subprocess.SubprocessError):
+            pass
+        f = rd(f"{b}/stat").split()
+        r_ = rate(f"blk-r-{b}", int(f[2]) * 512) if len(f) > 6 else 0
+        w_ = rate(f"blk-w-{b}", int(f[6]) * 512) if len(f) > 6 else 0
+        item = tr("sd_card", size=human(size)) + (f" · «{label}»" if label else "") + (f" · {mnt}" if mnt else "")
+        out.append((item, f"↓{human(r_)}{tr('per_s')} ↑{human(w_)}{tr('per_s')}"))
+    return out
+
+
 def sensors():
     """Температуры (CPU, GPU, SSD) и обороты вентиляторов из hwmon — без root."""
     temps, fans = {}, []
@@ -570,6 +678,19 @@ def snapshot(cfg=None):
             put(pid, item, stat)
         else:
             loose.append(item); loose_stats.append(stat if show else "")
+    card = by_role("card", "laptop")
+    for item, stat in sd_cards():
+        if card:
+            put(card, item, stat)
+        else:
+            loose.append(item); loose_stats.append(stat if show else "")
+    jack = audio_jack()
+    if jack:
+        pid = by_role("jack", owner) or by_role("jack", "laptop")
+        if pid:
+            put(pid, tr(jack))
+        else:
+            loose.append(tr(jack)); loose_stats.append("")
     for pid, p in ports.items():  # USB-C: питание по Power Delivery
         if p.get("typec"):
             info = typec_info(p["typec"])
@@ -583,7 +704,7 @@ def snapshot(cfg=None):
     busy = sum(p["busy"] for p in ports.values())
     return {"docked": docked, "groups": groups, "ports": ports, "loose": loose, "loose_stats": loose_stats,
             "busy": busy, "total": len(ports), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden,
-            "show_stats": show, "sensors": sensors(), "ts": time.time()}
+            "show_stats": show, "sensors": sensors(), "media": media_state(), "ts": time.time()}
 
 
 def diff(old, new):
@@ -600,6 +721,14 @@ def diff(old, new):
             ev.append(f"🔴 {p['label']}: " + (tr("ev_on") if len(k) == 1 else b[k]))
         for k in sorted(set(a) - set(b)):
             ev.append(f"⚫ {p['label']}: {tr('ev_off')}" + ("" if len(k) == 1 else f" {a[k]}"))
+    om, nm = old.get("media", {}), new.get("media", {})
+    if om and nm:
+        if om.get("mic_muted") != nm.get("mic_muted"):
+            ev.append(f"🎙 {tr('mic')}: {tr('muted') if nm['mic_muted'] else tr('on')}")
+        if om.get("cam_users") != nm.get("cam_users"):
+            ev.append(f"📷 {tr('cam')}: " + (tr("cam_busy", x=", ".join(nm["cam_users"])) if nm["cam_users"] else tr("cam_free")))
+        if bool(om.get("mic_users")) != bool(nm.get("mic_users")):
+            ev.append(f"🎙 {tr('mic')}: " + (tr("recording", x=", ".join(nm["mic_users"])) if nm["mic_users"] else tr("cam_free")))
     strip = lambda s: s.rsplit("  [", 1)[0]  # noqa: E731
     for x in sorted(set(map(strip, new["loose"])) - set(map(strip, old["loose"]))):
         ev.append(f"🔴 {x}")
@@ -618,6 +747,7 @@ def dump():
             if p["g"] == g["id"]:
                 det = "; ".join(i + (f"  [{st}]" if st else "") for i, st in zip(p["items"], p["stats"]))
                 print(f"  {'●' if p['busy'] else '○'} {p['label']:<9} {det}")
+    print("   ".join(media_lines(s["media"])))
     if sensors_text(s["sensors"]):
         print(sensors_text(s["sensors"]))
     if s["loose"]:
@@ -943,6 +1073,53 @@ def qt_app(mode):
                         q.drawText(QRectF(x0, r.bottom() + 3 + i * 16, x1 - x0, 16), Qt.AlignCenter,
                                    fm.elidedText(t, Qt.ElideRight, x1 - x0))
 
+        def bezel(self, q, r):
+            """Верхняя рамка экрана ThinkPad: микрофоны по бокам, камера с красной точкой, светодиод камеры,
+            слева — клавиши F1/F4 с их светодиодами; подписи состояния справа."""
+            m = self.s.get("media") or {}
+            q.setPen(QPen(EDGE, 1.5)); q.setBrush(QColor("#161617")); q.drawRoundedRect(r, 7, 7)
+            cy = r.center().y()
+            # клавиши F1 / F4 с LED, как на клавиатуре
+            for i, (lbl, on) in enumerate((("F1 🔇", m.get("spk_muted")), ("F4 🎙", m.get("mic_muted")))):
+                k = QRectF(r.left() + 12 + i * 66, cy - 13, 58, 26)
+                q.setPen(QPen(QColor("#2e2e30"), 1)); q.setBrush(QColor("#0f0f10")); q.drawRoundedRect(k, 4, 4)
+                q.setFont(font(10)); q.setPen(DIM); q.drawText(k.adjusted(6, 0, 0, 0), Qt.AlignVCenter | Qt.AlignLeft, lbl)
+                if on:
+                    g = QRadialGradient(QPointF(k.right() - 8, k.top() + 7), 9); cg = QColor("#f2f2f2"); cg.setAlpha(140)
+                    g.setColorAt(0, cg); cg.setAlpha(0); g.setColorAt(1, cg); q.setPen(Qt.NoPen); q.setBrush(QBrush(g))
+                    q.drawEllipse(QPointF(k.right() - 8, k.top() + 7), 9, 9)
+                q.setPen(Qt.NoPen); q.setBrush(QColor("#f4f4f4") if on else QColor("#333"))
+                q.drawEllipse(QPointF(k.right() - 8, k.top() + 7), 2.3, 2.3)
+            # микрофоны, камера, LED камеры — пропорции с фото рамки
+            mx = r.left() + r.width() * 0.30
+            for x in (mx - 90, mx + 90):
+                live = bool(m.get("mic_users")) and not m.get("mic_muted")
+                if live:
+                    g = QRadialGradient(QPointF(x, cy), 14); cg = QColor(RED); cg.setAlpha(150); g.setColorAt(0, cg)
+                    cg.setAlpha(0); g.setColorAt(1, cg); q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawEllipse(QPointF(x, cy), 14, 14)
+                q.setPen(Qt.NoPen); q.setBrush(HOLE); q.drawEllipse(QPointF(x, cy), 3, 3)
+                if m.get("mic_muted"):
+                    q.setPen(QPen(QColor("#8a8a8d"), 1.3)); q.drawLine(QPointF(x - 6, cy + 6), QPointF(x + 6, cy - 6))
+            cam_on = bool(m.get("cam_users"))
+            q.setPen(QPen(QColor("#2a2a2c"), 2)); q.setBrush(QColor("#0b0b0c")); q.drawEllipse(QPointF(mx, cy), 13, 13)
+            q.setBrush(QColor("#151517")); q.drawEllipse(QPointF(mx, cy), 8, 8)
+            q.setPen(Qt.NoPen); q.setBrush(RED if m.get("cam_present") else QColor("#333")); q.drawEllipse(QPointF(mx, cy), 2.6, 2.6)
+            lx = mx + 36
+            if cam_on:
+                g = QRadialGradient(QPointF(lx, cy), 12); cg = QColor("#ffffff"); cg.setAlpha(170); g.setColorAt(0, cg)
+                cg.setAlpha(0); g.setColorAt(1, cg); q.setBrush(QBrush(g)); q.drawEllipse(QPointF(lx, cy), 12, 12)
+            q.setBrush(QColor("#fafafa") if cam_on else QColor("#3a3a3c")); q.drawEllipse(QPointF(lx, cy), 2.6, 2.6)
+            # подписи
+            mic, cam, spk = media_lines(m) if m else ("", "", "")
+            tx = r.left() + r.width() * 0.47
+            fm = QFontMetricsF(font(11))
+            for i, (t, hot) in enumerate(((mic, bool(m.get("mic_users")) and not m.get("mic_muted")), (cam, cam_on))):
+                q.setFont(font(11, bold=hot)); q.setPen(RED if hot else TXT)
+                q.drawText(QPointF(tx, cy - 3 + i * 15), fm.elidedText(t, Qt.ElideRight, r.right() - tx - 10))
+            q.setFont(font(10)); q.setPen(DIM)
+            q.drawText(QRectF(tx, cy + 15, r.right() - tx - 10, 14), Qt.AlignLeft,
+                       fm.elidedText(spk + ("   ·   " + tr("shutter") if m.get("cam_present") else ""), Qt.ElideRight, r.right() - tx - 10))
+
         def paintEvent(self, ev):
             q = QPainter(self)
             q.setRenderHint(QPainter.Antialiasing)
@@ -981,6 +1158,10 @@ def qt_app(mode):
                     gw = avail * g.get("w", 1.0)
                     q.setFont(font(13, italic=True)); q.setPen(DIM); q.drawText(QPointF(x + 4, y + 12), g["title"])
                     r = QRectF(x, y + 20, gw, h)
+                    if g.get("bezel"):
+                        self.bezel(q, r)
+                        x += gw + gap
+                        continue
                     self.body(q, r, g)
                     for pt in self.s["ports"].values():
                         if pt["g"] != g["id"]:
@@ -1001,7 +1182,8 @@ def qt_app(mode):
                     if g.get("tower"):
                         self.tower(q, QRectF(W - 24 - tower_w + 8, y + 2, tower_w - 8, h + 18))
                     x += gw + gap
-                y += h + (64 if self.s["show_stats"] or any(g.get("vents") for g in row) else 52)
+                y += h + (34 if all(g.get("bezel") for g in row) else
+                          64 if self.s["show_stats"] or any(g.get("vents") for g in row) else 52)
             # connected / events
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(28, y + 6), tr("connected"))
             q.setFont(font(13))

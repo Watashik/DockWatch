@@ -8,6 +8,18 @@
   },
   "groups": [
     {
+      "id": "bezel",
+      "row": -1,
+      "w": 1.0,
+      "height": 56,
+      "bezel": true,
+      "title": {
+        "uk": "ThinkPad L14 · рамка екрана",
+        "ru": "ThinkPad L14 · рамка экрана",
+        "en": "ThinkPad L14 · display bezel"
+      }
+    },
+    {
       "id": "left",
       "row": 1,
       "w": 0.6,
@@ -50,7 +62,8 @@
       "g": "left",
       "x": 0.25,
       "mark": "SD",
-      "label": "@card"
+      "label": "@card",
+      "role": "card"
     },
     {
       "id": "l_hdmi",
@@ -99,7 +112,8 @@
       "g": "right",
       "x": 0.13,
       "mark": "🎧",
-      "label": "@audio"
+      "label": "@audio",
+      "role": "jack"
     },
     {
       "id": "r_usb",
