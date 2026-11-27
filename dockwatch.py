@@ -2039,6 +2039,8 @@ def qt_app(mode):
             self.resize(1100, 640)
             self.s = snapshot()
             self.log = []
+            self.log_seen = 0     # сколько событий было, когда окно событий открывали в последний раз
+            self.evwin = None
             self.rects = {}
             self.bg = None
             self.blink = 0
@@ -2051,6 +2053,7 @@ def qt_app(mode):
             self.flash = (None, 0.0)  # какая кнопка окна только что нажата (для отклика)
             self.plug_anim = False
             self.top_hover = False
+            self.ev_hover = False
             self.cal = None      # калибровка в окне: {"queue": [pid…], "i": n, "before": {usb names}, "bound": n}
             self.gear_hover = False
             self.drag = None
@@ -2077,7 +2080,8 @@ def qt_app(mode):
                     self.lit.pop(pid, None)
             for e in events:
                 self.log.insert(0, time.strftime("%H:%M:%S  ") + e)
-            self.log = self.log[:5]
+            self.log = self.log[:300]
+            self.refresh_events()
             self.blink ^= 1
             self.update()
 
@@ -2188,6 +2192,27 @@ def qt_app(mode):
                 for lx, on, col in ((-13, busy, QColor("#3ddc84")), (13, busy and self.blink, QColor("#ffb020"))):
                     q.setPen(Qt.NoPen); q.setBrush(col if on else LED_OFF); q.drawRect(QRectF(lx - 3, -19, 6, 3))
             q.restore()
+
+        def show_events(self):
+            """Отдельное окно со всеми событиями сессии (новые сверху)."""
+            from PySide6.QtWidgets import QPlainTextEdit
+            if self.evwin is None:
+                self.evwin = QDialog(self); self.evwin.setWindowTitle("DockWatch · " + tr("events"))
+                self.evwin.resize(620, 420)
+                lay = QVBoxLayout(self.evwin)
+                self.evtext = QPlainTextEdit(); self.evtext.setReadOnly(True)
+                self.evtext.setStyleSheet(f"QPlainTextEdit {{ background: {BGC.name()}; color: {TXT.name()}; border: 1px solid {EDGE.name()};"
+                                          f" font-size: 13px; }}")
+                lay.addWidget(self.evtext)
+            self.log_seen = len(self.log)
+            self.refresh_events()
+            self.evwin.show(); self.evwin.raise_(); self.evwin.activateWindow()
+            self.update()
+
+        def refresh_events(self):
+            if self.evwin is not None and self.evwin.isVisible():
+                self.evtext.setPlainText("\n".join(self.log) or tr("quiet"))
+                self.log_seen = len(self.log)
 
         def plug(self, q, c, kz, dt, kind, angle=0.0, edge=None):
             """Штекер въезжает в разъём: металл уходит внутрь (прячется за краем разъёма), корпус остаётся снаружи
@@ -2680,8 +2705,7 @@ def qt_app(mode):
                 rows.append(("—", tr("dock_hidden"), "", DIM))
             if not rows:
                 q.setPen(DIM); q.drawText(QPointF(40, yy), tr("nothing")); yy += 20
-            ex = W * 0.60
-            colw = ex - 150 - 20  # текст списка не должен залезать на колонку «События»
+            colw = W - 150 - 40  # события — в отдельном окне, список на всю ширину
             for lab, it, st, col in rows:
                 if yy > H - 100 - (16 if st else 0):  # не заезжать на подвал и кнопки
                     break
@@ -2705,13 +2729,6 @@ def qt_app(mode):
                             path.lineTo(px_, py_) if i else path.moveTo(px_, py_)
                         q.setPen(QPen(QColor("#d0464c"), 1.2)); q.setBrush(Qt.NoBrush); q.drawPath(path)
                 yy += 21
-            q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(ex, y + 6), tr("events"))
-            q.setFont(font(12)); q.setPen(DIM)
-            efm = QFontMetricsF(font(12))
-            for i, e in enumerate(self.log or [tr("quiet")]):
-                if y + 28 + i * 19 > H - 100:
-                    break
-                q.drawText(QPointF(ex + 8, y + 28 + i * 19), efm.elidedText(e, Qt.ElideRight, W - ex - 32))
             q.restore(); W = W_full
             # footer like the wallpaper: IBM — red line — Technologies and Design
             fy = H - 24
@@ -2744,6 +2761,19 @@ def qt_app(mode):
             q.drawRoundedRect(ic, 2, 2)
             q.drawRect(QRectF(ic.left() + 3, ic.top() + 3, ic.width() - 6, ic.height() * 0.4))
             q.drawRect(QRectF(ic.center().x() - 3, ic.bottom() - 6, 6, 4))
+            # кнопка «События»: значок — список, красная метка с числом новых
+            self.evbtn = QRectF(W - 142, fy - 60, 34, 34)
+            q.setPen(QPen(RED if fl == "ev" else EDGE, 1.2)); q.setBrush(KEYC.darker(140) if fl == "ev" else KEYC)
+            q.drawRoundedRect(self.evbtn.translated(0, 1) if fl == "ev" else self.evbtn, 7, 7)
+            q.setPen(QPen(TXT if self.ev_hover else DIM, 1.6, Qt.SolidLine, Qt.RoundCap))
+            for i in range(3):
+                yl = self.evbtn.top() + 11 + i * 6
+                q.drawPoint(QPointF(self.evbtn.left() + 10, yl)); q.drawLine(QPointF(self.evbtn.left() + 14, yl), QPointF(self.evbtn.right() - 9, yl))
+            new_ = len(self.log) - self.log_seen
+            if new_ > 0:
+                q.setPen(Qt.NoPen); q.setBrush(RED); q.drawEllipse(QPointF(self.evbtn.right() - 3, self.evbtn.top() + 3), 8, 8)
+                q.setFont(font(9, bold=True)); q.setPen(QColor("white"))
+                q.drawText(QRectF(self.evbtn.right() - 11, self.evbtn.top() - 5, 16, 16), Qt.AlignCenter, str(min(new_, 99)))
             o = self.s.get("os") or {}
             if o:  # система: логотип дистрибутива + название, ядро, рабочий стол
                 if not hasattr(self, "os_icon"):
@@ -2885,6 +2915,10 @@ def qt_app(mode):
                 self.flash = ("gear", time.monotonic()); self.repaint()
                 settings()
                 return
+            if e.button() == Qt.LeftButton and getattr(self, "evbtn", None) is not None and self.evbtn.contains(pos):
+                self.flash = ("ev", time.monotonic())
+                self.show_events()
+                return
             if self.topview and e.button() == Qt.LeftButton:  # клик по клавише нарисованной клавиатуры
                 hit = next((c for c, r in self.kb_keys.items() if r.contains(pos)), None)
                 if hit is not None:
@@ -2922,12 +2956,13 @@ def qt_app(mode):
             pos = e.position() / self.scale
             hov = getattr(self, "gear", None) is not None and self.gear.contains(pos)
             thov = getattr(self, "topbtn", None) is not None and self.topbtn.contains(pos)
-            if hov != self.gear_hover or thov != self.top_hover:
-                self.gear_hover, self.top_hover = hov, thov
-                self.setCursor(Qt.PointingHandCursor if (hov or thov) else Qt.ArrowCursor)
+            ehov = getattr(self, "evbtn", None) is not None and self.evbtn.contains(pos)
+            if (hov, thov, ehov) != (self.gear_hover, self.top_hover, self.ev_hover):
+                self.gear_hover, self.top_hover, self.ev_hover = hov, thov, ehov
+                self.setCursor(Qt.PointingHandCursor if (hov or thov or ehov) else Qt.ArrowCursor)
                 self.update()
-            if hov or thov:
-                self.setToolTip(tr("m_settings").rstrip("…") if hov else tr("top_view"))
+            if hov or thov or ehov:
+                self.setToolTip(tr("m_settings").rstrip("…") if hov else tr("top_view") if thov else tr("events"))
                 return
             if self.editing and getattr(self, "drag", None):
                 pt = self.s["ports"][self.drag]
@@ -3242,6 +3277,7 @@ def qt_app(mode):
         for a in alerts(s, prev, state.setdefault("alerts", {}), load_config()):
             log_event(a)
             view.log.insert(0, time.strftime("%H:%M:%S  ") + a)
+            view.refresh_events()
             notify(a)
         if view.cal:
             cal_step(s)
