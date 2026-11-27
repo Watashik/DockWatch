@@ -1,0 +1,23 @@
+{
+  "id": "lenovo-thinkpad-basic-dock-40ag",
+  "name": "ThinkPad Basic Dock (40AG) — draft",
+  "draft": true,
+  "note": "Layout from the official photo. USB hub IDs unknown: choose the dock manually in the menu, run calibration, send `dockwatch report` with the dock attached to enable auto-detection.",
+  "match": {"usb_hubs": []},
+  "usb_hubs": {},
+  "groups": [
+    {"id": "dock", "row": 0, "w": 1.0, "height": 96, "tower": true,
+     "title": {"uk": "ThinkPad Basic Dock · задня панель", "ru": "ThinkPad Basic Dock · задняя панель", "en": "ThinkPad Basic Dock · rear panel"}}
+  ],
+  "ports": [
+    {"id": "audio", "kind": "audio", "g": "dock", "x": 0.318, "mark": "🎧", "label": "@audio", "role": "jack"},
+    {"id": "power", "kind": "dc", "g": "dock", "x": 0.379, "mark": "⎓", "label": "@power", "role": "power"},
+    {"id": "dp", "kind": "dp", "g": "dock", "x": 0.447, "mark": "D▸", "label": "DP", "video": true},
+    {"id": "vga", "kind": "vga", "g": "dock", "x": 0.556, "mark": "▭", "label": "VGA", "video": true},
+    {"id": "usb1", "kind": "usb", "g": "dock", "x": 0.667, "mark": "2.0", "label": "USB 1"},
+    {"id": "usb2", "kind": "usb", "g": "dock", "x": 0.726, "mark": "2.0", "label": "USB 2"},
+    {"id": "usb3", "kind": "usb", "g": "dock", "x": 0.784, "mark": "SS⚡", "label": "USB ⚡"},
+    {"id": "usb4", "kind": "usb", "g": "dock", "x": 0.861, "mark": "SS", "label": "USB 3"},
+    {"id": "eth", "kind": "rj45", "g": "dock", "x": 0.967, "mark": "⊞", "label": "LAN", "role": "eth"}
+  ]
+}

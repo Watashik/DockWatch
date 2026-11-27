@@ -91,6 +91,7 @@ NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-l
 | Type | Model | Profile |
 |---|---|---|
 | Dock | Lenovo ThinkPad Ultra Docking Station (40AJ) | `profiles/docks/lenovo-thinkpad-ultra-dock-40aj.json` |
+| Dock (draft) | Lenovo ThinkPad Basic Dock (40AG) | `profiles/docks/lenovo-thinkpad-basic-dock-40ag.json` |
 | Dock (draft) | Lenovo ThinkPad USB-C Dock Gen 2 (40AS) | `profiles/docks/lenovo-thinkpad-usb-c-dock-gen2-40as.json` |
 | Dock (draft) | Dell WD19 | `profiles/docks/dell-wd19.json` |
 | Dock | HP UltraSlim Docking Station (2013) | `profiles/docks/hp-ultraslim-dock-2013.json` |
