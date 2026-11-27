@@ -2086,7 +2086,7 @@ def qt_app(mode):
             if not load_config().get("animations", True):
                 return False
             now = time.monotonic()
-            return bool(self.cal) or any(now - t < 1.1 for t in self.lit.values())
+            return bool(self.cal) or any(now - t < 1.3 for t in self.lit.values())
 
         def connector(self, q, kind, c, busy, k=1.0, pid=None):
             fade = 1.0
@@ -2187,26 +2187,70 @@ def qt_app(mode):
             q.restore()
 
         def plug(self, q, c, kz, dt, kind):
-            """Тест: штекер с кабелем въезжает сверху в разъём и растворяется."""
-            if dt > 1.1:
+            """Тест: штекер с кабелем поднимается снизу в разъём, в момент контакта — волна подсветки."""
+            T_IN, T_HOLD, T_OUT = 0.5, 0.35, 0.35
+            if dt > T_IN + T_HOLD + T_OUT:
                 return
-            t = min(1.0, dt / 0.55)
-            e = 1 - (1 - t) ** 3  # ease-out
-            alpha = 1.0 if dt < 0.75 else max(0.0, 1 - (dt - 0.75) / 0.35)
-            w = {"usbc": 16, "hdmi": 26, "dp": 24, "vga": 34, "rj45": 22, "audio": 8, "dc": 12}.get(kind, 20) * kz
-            hgt = 14 * kz
-            top = c.y() - hgt / 2 - (1 - e) * 46 * kz
-            q.save(); q.setOpacity(alpha)
-            q.setPen(QPen(QColor(30, 30, 32), 4 * kz, Qt.SolidLine, Qt.RoundCap))
-            q.drawLine(QPointF(c.x(), top - 60 * kz), QPointF(c.x(), top))
-            q.setPen(QPen(QColor(90, 90, 95), 1)); q.setBrush(QColor(55, 55, 58))
-            q.drawRoundedRect(QRectF(c.x() - w / 2 - 3 * kz, top - 10 * kz, w + 6 * kz, 12 * kz), 3, 3)  # корпус штекера
-            q.setBrush(QColor(170, 170, 176)); q.drawRect(QRectF(c.x() - w / 2, top, w, hgt))          # металлический язычок
+            t = min(1.0, dt / T_IN)
+            k_ = 1.70158  # ease-out-back: чуть «доезжает» и садится на место
+            e = 1 + (k_ + 1) * (t - 1) ** 3 + k_ * (t - 1) ** 2
+            alpha = 1.0 if dt < T_IN + T_HOLD else max(0.0, 1 - (dt - T_IN - T_HOLD) / T_OUT)
+            w = {"usbc": 15, "hdmi": 24, "dp": 22, "vga": 30, "rj45": 20, "audio": 7, "dc": 11, "minidp": 15,
+                 "microhdmi": 14}.get(kind, 18) * kz
+            th = 9 * kz                       # видимая часть металла
+            bw, bh = w + 10 * kz, 22 * kz     # пластиковый корпус
+            tip_top = c.y() - th * 0.2 + (1 - e) * 54 * kz   # у разъёма металл уходит внутрь
+            q.save(); q.setOpacity(alpha); q.setRenderHint(QPainter.Antialiasing)
+            # мягкая тень
+            sh = QRadialGradient(QPointF(c.x(), tip_top + th + bh * 0.7), bw)
+            sh.setColorAt(0, QColor(0, 0, 0, 90)); sh.setColorAt(1, QColor(0, 0, 0, 0))
+            q.setPen(Qt.NoPen); q.setBrush(QBrush(sh)); q.drawEllipse(QPointF(c.x(), tip_top + th + bh * 0.7), bw, bh * 0.8)
+            # кабель — плавная дуга вниз
+            body_bot = tip_top + th + bh
+            path = QPainterPath(QPointF(c.x(), body_bot + 4 * kz))
+            path.cubicTo(QPointF(c.x(), body_bot + 30 * kz), QPointF(c.x() + 14 * kz, body_bot + 46 * kz),
+                         QPointF(c.x() + 22 * kz, body_bot + 80 * kz))
+            q.setBrush(Qt.NoBrush)
+            q.setPen(QPen(QColor(12, 12, 14), 6 * kz, Qt.SolidLine, Qt.RoundCap)); q.drawPath(path)
+            q.setPen(QPen(QColor(70, 70, 76), 1.6 * kz, Qt.SolidLine, Qt.RoundCap)); q.drawPath(path.translated(-1.2 * kz, 0))
+            # хвостовик-разгрузка
+            q.setPen(Qt.NoPen); q.setBrush(QColor(28, 28, 31))
+            q.drawRoundedRect(QRectF(c.x() - 5 * kz, body_bot - 2 * kz, 10 * kz, 9 * kz), 3 * kz, 3 * kz)
+            # корпус штекера: тёмный пластик с бликом
+            body = QRectF(c.x() - bw / 2, tip_top + th, bw, bh)
+            g = QLinearGradient(body.topLeft(), body.topRight())
+            g.setColorAt(0, QColor(36, 36, 40)); g.setColorAt(0.35, QColor(72, 72, 78)); g.setColorAt(1, QColor(24, 24, 27))
+            q.setPen(QPen(QColor(10, 10, 12), 1)); q.setBrush(QBrush(g)); q.drawRoundedRect(body, 4 * kz, 4 * kz)
+            q.setPen(QPen(QColor(255, 255, 255, 40), 1)); q.drawLine(QPointF(body.left() + 3 * kz, body.top() + 3 * kz),
+                                                                     QPointF(body.left() + 3 * kz, body.bottom() - 4 * kz))
+            # металлический наконечник
+            tip = QRectF(c.x() - w / 2, tip_top, w, th + 1)
+            mg = QLinearGradient(tip.topLeft(), tip.topRight())
+            mg.setColorAt(0, QColor(150, 150, 158)); mg.setColorAt(0.45, QColor(235, 235, 240)); mg.setColorAt(1, QColor(120, 120, 128))
+            q.setPen(QPen(QColor(90, 90, 96), 0.8)); q.setBrush(QBrush(mg))
+            if kind in ("usbc", "audio", "dc"):
+                q.drawRoundedRect(tip, w / 2 if kind != "usbc" else th / 2, w / 2 if kind != "usbc" else th / 2)
+            elif kind in ("hdmi", "dp", "minidp", "microhdmi"):
+                tp = QPainterPath(); tp.moveTo(tip.left(), tip.bottom()); tp.lineTo(tip.right(), tip.bottom())
+                tp.lineTo(tip.right(), tip.top() + 2 * kz); tp.lineTo(tip.right() - 3 * kz, tip.top()); tp.lineTo(tip.left() + 3 * kz, tip.top())
+                tp.lineTo(tip.left(), tip.top() + 2 * kz); tp.closeSubpath(); q.drawPath(tp)
+            elif kind == "rj45":
+                q.setBrush(QColor(200, 210, 220, 150)); q.drawRoundedRect(tip.adjusted(0, -3 * kz, 0, 0), 2, 2)
+            else:
+                q.drawRect(tip)
+                q.setPen(Qt.NoPen); q.setBrush(QColor(40, 40, 44)); q.drawRect(QRectF(tip.left() + 2 * kz, tip.top() + 2 * kz, w - 4 * kz, th * 0.35))
             q.restore()
+            # волна в момент контакта
+            if dt > T_IN * 0.8:
+                r_ = (dt - T_IN * 0.8) / 0.6
+                if r_ < 1:
+                    col = QColor(accent(kind)); col.setAlphaF(max(0.0, 0.8 * (1 - r_)))
+                    q.save(); q.setPen(QPen(col, 2 * kz)); q.setBrush(Qt.NoBrush)
+                    q.drawEllipse(c, (10 + 26 * r_) * kz, (8 + 18 * r_) * kz); q.restore()
 
         def top_view(self, q, y, W, kz):
             """Вид сверху: ноутбук с клавиатурой, порты по бокам (по своим местам), док — полосой сзади."""
-            lw, lh = 430 * kz, 270 * kz
+            lw, lh = 420 * kz, 298 * kz
             dock = self.s.get("dock") if not self.s.get("dock_hidden") else None
             x0 = (W - lw) / 2
             y0 = y + (112 if dock else 46) * kz
@@ -2244,28 +2288,72 @@ def qt_app(mode):
                 dps = sorted((pt for pt in self.s["ports"].values() if pt["owner"] == "dock"), key=lambda p_: -p_["x"])
                 for i, pt in enumerate(dps):  # подписи вплотную стоящих разъёмов — в два яруса
                     mark(dr.left() + dr.width() * (1 - pt["x"]), dr.top(), False, pt, "up", 16 if i % 2 else 0)
-            # корпус и клавиатура
+            # корпус (пропорции L14: 331×235 мм), петли, клавиатура как на настоящей ThinkPad
             body = QRectF(x0, y0, lw, lh)
             grad = QLinearGradient(body.topLeft(), body.bottomLeft())
-            grad.setColorAt(0, BODY_HI); grad.setColorAt(0.1, BODY); grad.setColorAt(1, BODY_LO)
+            grad.setColorAt(0, BODY_HI); grad.setColorAt(0.08, BODY); grad.setColorAt(1, BODY_LO)
             q.setPen(QPen(EDGE, 1.5)); q.setBrush(QBrush(grad)); q.drawRoundedRect(body, 14, 14)
-            kb = QRectF(x0 + lw * 0.08, y0 + lh * 0.12, lw * 0.84, lh * 0.46)
-            cols, rows_ = 14, 6
-            kw, kh = kb.width() / cols, kb.height() / rows_
-            q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(KEYC)
-            for i in range(rows_):
-                for j in range(cols):
-                    if i == rows_ - 1 and 3 < j < 10:
-                        if j == 4:  # пробел
-                            q.drawRoundedRect(QRectF(kb.left() + j * kw + 1, kb.top() + i * kh + 1, kw * 6 - 2, kh - 2), 2, 2)
-                        continue
-                    q.drawRoundedRect(QRectF(kb.left() + j * kw + 1, kb.top() + i * kh + 1, kw - 2, kh - 2), 2, 2)
-            tp = QRectF(x0 + lw * 0.36, y0 + lh * 0.65, lw * 0.28, lh * 0.27)
-            q.setBrush(BODY_HI); q.drawRoundedRect(tp, 6, 6)
+            q.setPen(QPen(EDGE, 1)); q.setBrush(QColor(150, 150, 155))
+            for hx in (0.24, 0.76):  # петли
+                q.drawRoundedRect(QRectF(x0 + lw * hx - 14 * kz, y0 - 3 * kz, 28 * kz, 8 * kz), 2, 2)
             lap = self.s.get("laptop") or {}
-            if lap.get("brand", "ThinkPad") == "ThinkPad":  # трекпойнт
+            tp_style = lap.get("brand", "ThinkPad") == "ThinkPad"
+            kb = QRectF(x0 + lw * 0.045, y0 + lh * 0.07, lw * 0.865, lh * 0.45)
+            u = kb.width() / 15.0
+            rh = kb.height() / 5.6           # обычный ряд; ряд F-клавиш — 0.6
+            gap = 1.6 * kz
+            q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(KEYC)
+
+            def key(xu, yy, wu, hh):
+                q.drawRoundedRect(QRectF(kb.left() + xu * u + gap / 2, yy + gap / 2, wu * u - gap, hh - gap), 2.5, 2.5)
+            yy = kb.top()
+            for i in range(17):  # Esc, F1–F12, Home, End, Insert, Delete
+                key(i * 15 / 17, yy, 15 / 17, rh * 0.6)
+            yy += rh * 0.6
+            rows_u = [[1] * 13 + [2], [1.5] + [1] * 12 + [1.5], [1.75] + [1] * 11 + [2.25], [2.25] + [1] * 10 + [2.75]]
+            for row_ in rows_u:
+                xu = 0
+                for wu in row_:
+                    key(xu, yy, wu, rh); xu += wu
+                yy += rh
+            xu = 0
+            for wu in (1, 1, 1, 1, 5, 1, 1, 1):  # Fn Ctrl Win Alt Space Alt PrtSc Ctrl
+                key(xu, yy, wu, rh); xu += wu
+            for j in range(3):  # PgUp ↑ PgDn / ← ↓ →
+                key(xu + j, yy, 1, rh / 2); key(xu + j, yy + rh / 2, 1, rh / 2)
+            kb_bottom = yy + rh
+            if tp_style:  # трекпойнт между G, H и B
+                tpx = kb.left() + 6.75 * u
                 q.setPen(Qt.NoPen); q.setBrush(RED)
-                q.drawEllipse(QPointF(kb.center().x(), kb.top() + kh * 3.9), 4 * kz, 4 * kz)
+                q.drawEllipse(QPointF(tpx, kb.top() + rh * 0.6 + rh * 3), 4.2 * kz, 4.2 * kz)
+            # кнопка питания справа сверху
+            q.setPen(QPen(EDGE, 1)); q.setBrush(KEYC)
+            q.drawEllipse(QPointF(x0 + lw * 0.955, y0 + lh * 0.085), 7 * kz, 7 * kz)
+            q.setPen(QPen(LED_ON, 1)); q.drawEllipse(QPointF(x0 + lw * 0.955, y0 + lh * 0.085), 2 * kz, 2 * kz)
+            # тачпад под пробелом, над ним три кнопки с красными полосками
+            cx_ = kb.left() + 6.6 * u
+            tw_, top_ = lw * 0.31, kb_bottom + lh * 0.03
+            if tp_style:
+                bh_ = lh * 0.055
+                q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(KEYC)
+                for k_, (a_, b_) in enumerate(((0, 0.4), (0.4, 0.6), (0.6, 1.0))):
+                    br = QRectF(cx_ - tw_ / 2 + tw_ * a_ + 1, top_, tw_ * (b_ - a_) - 2, bh_)
+                    q.drawRoundedRect(br, 2, 2)
+                    if k_ != 1:
+                        q.setPen(Qt.NoPen); q.setBrush(RED)
+                        q.drawRect(QRectF(br.left() + 3, br.top() + bh_ * 0.35, br.width() - 6, 1.6 * kz))
+                        q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(KEYC)
+                top_ += bh_ + 3 * kz
+            tp = QRectF(cx_ - tw_ / 2, top_, tw_, y0 + lh * 0.93 - top_)
+            q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(BODY_HI); q.drawRoundedRect(tp, 6, 6)
+            # сканер отпечатка справа от тачпада
+            q.setPen(QPen(EDGE, 1)); q.setBrush(KEYC)
+            q.drawRoundedRect(QRectF(tp.right() + lw * 0.06, tp.top() + 4 * kz, 16 * kz, 12 * kz), 3, 3)
+            # надпись бренда по диагонали справа снизу
+            q.save(); q.translate(x0 + lw * 0.86, y0 + lh * 0.86); q.rotate(-37)
+            q.setFont(font(int(13 * kz), True, True)); q.setPen(DIM)
+            q.drawText(QPointF(-36 * kz, 0), lap.get("brand", "ThinkPad") or "ThinkPad")
+            q.restore()
             # порты ноутбука по бокам: левый бок — сзади наперёд сверху вниз, правый — наоборот (как смотреть с боку)
             side_of = {}
             for g in self.s["groups"]:
@@ -2277,9 +2365,9 @@ def qt_app(mode):
                     continue
                 sd = side_of.get(pt["g"])
                 if sd == "left":
-                    mark(x0, y0 + lh * (0.08 + 0.84 * pt["x"]), True, pt, "left")
+                    mark(x0, y0 + lh * (0.03 + 0.94 * pt["x"]), True, pt, "left")
                 elif sd == "right":
-                    mark(x0 + lw, y0 + lh * (0.08 + 0.84 * (1 - pt["x"])), True, pt, "right")
+                    mark(x0 + lw, y0 + lh * (0.03 + 0.94 * (1 - pt["x"])), True, pt, "right")
                 elif sd == "rear":
                     mark(x0 + lw * (1 - pt["x"]), y0, False, pt, "up")
                 elif sd == "front":
