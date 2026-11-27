@@ -2189,63 +2189,58 @@ def qt_app(mode):
                     q.setPen(Qt.NoPen); q.setBrush(col if on else LED_OFF); q.drawRect(QRectF(lx - 3, -19, 6, 3))
             q.restore()
 
-        def plug(self, q, c, kz, dt, kind):
-            """Тест: штекер с кабелем поднимается снизу в разъём, в момент контакта — волна подсветки."""
-            T_IN, T_HOLD, T_OUT = 0.5, 0.35, 0.35
+        def plug(self, q, c, kz, dt, kind, angle=0.0, edge=None):
+            """Штекер въезжает в разъём: металл уходит внутрь (прячется за краем разъёма), корпус остаётся снаружи
+            и плавно растворяется. angle — откуда идёт штекер (0 — снизу, 90 — слева, -90 — справа, 180 — сверху)."""
+            T_IN, T_HOLD, T_OUT = 0.5, 0.35, 0.45
             if dt > T_IN + T_HOLD + T_OUT:
                 return
             t = min(1.0, dt / T_IN)
-            k_ = 1.70158  # ease-out-back: чуть «доезжает» и садится на место
-            e = 1 + (k_ + 1) * (t - 1) ** 3 + k_ * (t - 1) ** 2
+            e = 1 - (1 - t) ** 3  # ease-out
             alpha = 1.0 if dt < T_IN + T_HOLD else max(0.0, 1 - (dt - T_IN - T_HOLD) / T_OUT)
             w = {"usbc": 15, "hdmi": 24, "dp": 22, "vga": 30, "rj45": 20, "audio": 7, "dc": 11, "minidp": 15,
                  "microhdmi": 14}.get(kind, 18) * kz
-            th = 9 * kz                       # видимая часть металла
+            if edge is None:  # нижний край разъёма в виде сбоку
+                edge = {"usbc": 4, "audio": 5, "hdmi": 6, "dp": 7, "vga": 9, "rj45": 11, "dc": 7}.get(kind, 7) * kz
+            th = 12 * kz                      # металлический язычок
             bw, bh = w + 10 * kz, 22 * kz     # пластиковый корпус
-            tip_top = c.y() - th * 0.2 + (1 - e) * 54 * kz   # у разъёма металл уходит внутрь
-            q.save(); q.setOpacity(alpha); q.setRenderHint(QPainter.Antialiasing)
-            # мягкая тень
-            sh = QRadialGradient(QPointF(c.x(), tip_top + th + bh * 0.7), bw)
+            body_top = edge + (1 - e) * 46 * kz
+            q.save(); q.translate(c); q.rotate(angle); q.setOpacity(alpha); q.setRenderHint(QPainter.Antialiasing)
+            # тень, кабель, хвостовик, корпус — снаружи разъёма
+            sh = QRadialGradient(QPointF(0, body_top + bh * 0.7), bw)
             sh.setColorAt(0, QColor(0, 0, 0, 90)); sh.setColorAt(1, QColor(0, 0, 0, 0))
-            q.setPen(Qt.NoPen); q.setBrush(QBrush(sh)); q.drawEllipse(QPointF(c.x(), tip_top + th + bh * 0.7), bw, bh * 0.8)
-            # кабель — плавная дуга вниз
-            body_bot = tip_top + th + bh
-            path = QPainterPath(QPointF(c.x(), body_bot + 4 * kz))
-            path.cubicTo(QPointF(c.x(), body_bot + 30 * kz), QPointF(c.x() + 14 * kz, body_bot + 46 * kz),
-                         QPointF(c.x() + 22 * kz, body_bot + 80 * kz))
+            q.setPen(Qt.NoPen); q.setBrush(QBrush(sh)); q.drawEllipse(QPointF(0, body_top + bh * 0.7), bw, bh * 0.8)
+            body_bot = body_top + bh
+            path = QPainterPath(QPointF(0, body_bot + 4 * kz))
+            path.cubicTo(QPointF(0, body_bot + 30 * kz), QPointF(14 * kz, body_bot + 46 * kz), QPointF(22 * kz, body_bot + 80 * kz))
             q.setBrush(Qt.NoBrush)
             q.setPen(QPen(QColor(12, 12, 14), 6 * kz, Qt.SolidLine, Qt.RoundCap)); q.drawPath(path)
             q.setPen(QPen(QColor(70, 70, 76), 1.6 * kz, Qt.SolidLine, Qt.RoundCap)); q.drawPath(path.translated(-1.2 * kz, 0))
-            # хвостовик-разгрузка
             q.setPen(Qt.NoPen); q.setBrush(QColor(28, 28, 31))
-            q.drawRoundedRect(QRectF(c.x() - 5 * kz, body_bot - 2 * kz, 10 * kz, 9 * kz), 3 * kz, 3 * kz)
-            # корпус штекера: тёмный пластик с бликом
-            body = QRectF(c.x() - bw / 2, tip_top + th, bw, bh)
-            g = QLinearGradient(body.topLeft(), body.topRight())
-            g.setColorAt(0, QColor(36, 36, 40)); g.setColorAt(0.35, QColor(72, 72, 78)); g.setColorAt(1, QColor(24, 24, 27))
-            q.setPen(QPen(QColor(10, 10, 12), 1)); q.setBrush(QBrush(g)); q.drawRoundedRect(body, 4 * kz, 4 * kz)
-            q.setPen(QPen(QColor(255, 255, 255, 40), 1)); q.drawLine(QPointF(body.left() + 3 * kz, body.top() + 3 * kz),
-                                                                     QPointF(body.left() + 3 * kz, body.bottom() - 4 * kz))
-            # металлический наконечник
-            tip = QRectF(c.x() - w / 2, tip_top, w, th + 1)
+            q.drawRoundedRect(QRectF(-5 * kz, body_bot - 2 * kz, 10 * kz, 9 * kz), 3 * kz, 3 * kz)
+            # металл — только та часть, что ещё снаружи (за краем разъёма его не видно)
+            q.save(); q.setClipRect(QRectF(-200, edge, 400, 400))
+            tip = QRectF(-w / 2, body_top - th, w, th + 1)
             mg = QLinearGradient(tip.topLeft(), tip.topRight())
             mg.setColorAt(0, QColor(150, 150, 158)); mg.setColorAt(0.45, QColor(235, 235, 240)); mg.setColorAt(1, QColor(120, 120, 128))
             q.setPen(QPen(QColor(90, 90, 96), 0.8)); q.setBrush(QBrush(mg))
             if kind in ("usbc", "audio", "dc"):
-                q.drawRoundedRect(tip, w / 2 if kind != "usbc" else th / 2, w / 2 if kind != "usbc" else th / 2)
-            elif kind in ("hdmi", "dp", "minidp", "microhdmi"):
-                tp = QPainterPath(); tp.moveTo(tip.left(), tip.bottom()); tp.lineTo(tip.right(), tip.bottom())
-                tp.lineTo(tip.right(), tip.top() + 2 * kz); tp.lineTo(tip.right() - 3 * kz, tip.top()); tp.lineTo(tip.left() + 3 * kz, tip.top())
-                tp.lineTo(tip.left(), tip.top() + 2 * kz); tp.closeSubpath(); q.drawPath(tp)
+                rr = th / 2 if kind == "usbc" else w / 2
+                q.drawRoundedRect(tip, rr, rr)
             elif kind == "rj45":
-                q.setBrush(QColor(200, 210, 220, 150)); q.drawRoundedRect(tip.adjusted(0, -3 * kz, 0, 0), 2, 2)
+                q.setBrush(QColor(200, 210, 220, 150)); q.drawRoundedRect(tip, 2, 2)
             else:
                 q.drawRect(tip)
-                q.setPen(Qt.NoPen); q.setBrush(QColor(40, 40, 44)); q.drawRect(QRectF(tip.left() + 2 * kz, tip.top() + 2 * kz, w - 4 * kz, th * 0.35))
             q.restore()
-            # волна в момент контакта
-            if dt > T_IN * 0.8:
-                r_ = (dt - T_IN * 0.8) / 0.6
+            body = QRectF(-bw / 2, body_top, bw, bh)
+            g = QLinearGradient(body.topLeft(), body.topRight())
+            g.setColorAt(0, QColor(36, 36, 40)); g.setColorAt(0.35, QColor(72, 72, 78)); g.setColorAt(1, QColor(24, 24, 27))
+            q.setPen(QPen(QColor(10, 10, 12), 1)); q.setBrush(QBrush(g)); q.drawRoundedRect(body, 4 * kz, 4 * kz)
+            q.setPen(QPen(QColor(255, 255, 255, 40), 1))
+            q.drawLine(QPointF(body.left() + 3 * kz, body.top() + 3 * kz), QPointF(body.left() + 3 * kz, body.bottom() - 4 * kz))
+            q.restore()
+            if dt > T_IN * 0.85:  # волна в момент контакта
+                r_ = (dt - T_IN * 0.85) / 0.6
                 if r_ < 1:
                     col = QColor(accent(kind)); col.setAlphaF(max(0.0, 0.8 * (1 - r_)))
                     q.save(); q.setPen(QPen(col, 2 * kz)); q.setBrush(Qt.NoBrush)
@@ -2283,6 +2278,9 @@ def qt_app(mode):
                 else:
                     q.drawText(QRectF(px - 40, py + 10 * kz, 80, 14), Qt.AlignCenter, lab)
                 self.rects[pt["id"]] = r.adjusted(-8, -8, 8, 8)
+                if busy and self.plug_anim and pt["id"] in self.lit:  # штекер приходит снаружи корпуса
+                    ang = {"left": 90, "right": -90, "up": 180, "down": 0}[label_side]
+                    self.plug(q, QPointF(px, py), kz * 0.7, time.monotonic() - self.lit[pt["id"]], pt["kind"], ang, 0)
 
             # док сзади: задняя панель смотрит назад, поэтому сверху её порядок зеркальный
             if dock:
