@@ -27,6 +27,10 @@ touch ~/.local/share/icons/hicolor
 cp data/dockwatch.desktop ~/.local/share/applications/dockwatch.desktop
 command -v update-desktop-database >/dev/null && update-desktop-database ~/.local/share/applications || true
 command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
+if command -v kpackagetool6 >/dev/null; then  # виджет для панели Plasma 6
+  kpackagetool6 -t Plasma/Applet -u plasmoid >/dev/null 2>&1 || kpackagetool6 -t Plasma/Applet -i plasmoid >/dev/null 2>&1 || true
+  echo "Plasma widget installed: right-click the panel → Add Widgets → DockWatch"
+fi
 if [ "$1" = "--autostart" ]; then
   mkdir -p ~/.config/autostart
   printf '[Desktop Entry]\nType=Application\nName=DockWatch\nExec=dockwatch tray\nIcon=dockwatch\n' > ~/.config/autostart/dockwatch.desktop

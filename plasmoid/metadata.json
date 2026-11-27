@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "Watashik" }],
+        "Category": "System Information",
+        "Description": "Docking station and laptop ports at a glance",
+        "Description[uk]": "Порти док-станції й ноутбука одним поглядом",
+        "Description[ru]": "Порты док-станции и ноутбука одним взглядом",
+        "Icon": "dockwatch",
+        "Id": "io.github.watashik.dockwatch",
+        "License": "MIT",
+        "Name": "DockWatch",
+        "Version": "0.2.0",
+        "Website": "https://github.com/Watashik/DockWatch"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,6 +1,6 @@
 pkgbase = dockwatch
 	pkgdesc = Live port map of your docking station and laptop (ThinkPad style): tray, GUI and TUI, plug/unplug notifications
-	pkgver = 0.1.0
+	pkgver = 0.2.0
 	pkgrel = 1
 	url = https://github.com/Watashik/DockWatch
 	arch = any
@@ -13,7 +13,7 @@ pkgbase = dockwatch
 	optdepends = networkmanager: Wi-Fi network and signal in the header
 	optdepends = bluez-utils: connected Bluetooth devices and their battery
 	optdepends = power-profiles-daemon: switch power profile from the menu
-	source = dockwatch::git+https://github.com/Watashik/DockWatch.git#tag=v0.1.0
+	source = dockwatch::git+https://github.com/Watashik/DockWatch.git#tag=v0.2.0
 	sha256sums = SKIP
 
 pkgname = dockwatch

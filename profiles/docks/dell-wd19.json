@@ -1,0 +1,28 @@
+{
+  "id": "dell-wd19",
+  "name": "Dell WD19 — draft",
+  "draft": true,
+  "note": "Layout from the spec sheet, not verified on real hardware. Send a photo + lsusb to fix it.",
+  "match": {"usb_hubs": []},
+  "usb_hubs": {},
+  "groups": [
+    {"id": "front", "row": 0, "w": 0.3, "height": 70,
+     "title": {"uk": "Dell WD19 · спереду", "ru": "Dell WD19 · спереди", "en": "Dell WD19 · front"}},
+    {"id": "rear", "row": 0, "w": 0.7, "height": 70,
+     "title": {"uk": "ззаду", "ru": "сзади", "en": "rear"}}
+  ],
+  "ports": [
+    {"id": "f_audio", "kind": "audio", "g": "front", "x": 0.2, "mark": "🎧", "label": "@audio", "role": "jack"},
+    {"id": "f_usb", "kind": "usb", "g": "front", "x": 0.5, "mark": "SS⚡", "label": "USB ⚡"},
+    {"id": "f_usbc", "kind": "usbc", "g": "front", "x": 0.8, "mark": "⇆", "label": "USB-C"},
+    {"id": "dp1", "kind": "dp", "g": "rear", "x": 0.08, "mark": "D▸", "label": "DP 1", "video": true},
+    {"id": "dp2", "kind": "dp", "g": "rear", "x": 0.2, "mark": "D▸", "label": "DP 2", "video": true},
+    {"id": "hdmi", "kind": "hdmi", "g": "rear", "x": 0.32, "mark": "HDMI", "label": "HDMI", "video": true},
+    {"id": "usbc", "kind": "usbc", "g": "rear", "x": 0.43, "mark": "D▸", "label": "USB-C DP"},
+    {"id": "usb1", "kind": "usb", "g": "rear", "x": 0.53, "mark": "SS", "label": "USB 1"},
+    {"id": "usb2", "kind": "usb", "g": "rear", "x": 0.62, "mark": "SS", "label": "USB 2"},
+    {"id": "eth", "kind": "rj45", "g": "rear", "x": 0.73, "mark": "⊞", "label": "LAN", "role": "eth"},
+    {"id": "power", "kind": "dc", "g": "rear", "x": 0.85, "mark": "⎓", "label": "@power", "role": "power"},
+    {"id": "host", "kind": "usbc", "g": "rear", "x": 0.95, "mark": "💻", "label": "Host"}
+  ]
+}

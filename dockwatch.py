@@ -141,6 +141,28 @@ TR = {
     "performance": {"uk": "Продуктивність", "ru": "Производительность", "en": "Performance"},
     "bat_health": {"uk": "знос {w}% · {c} циклів", "ru": "износ {w}% · {c} циклов", "en": "wear {w}% · {c} cycles"},
     "bt_bat": {"uk": "{n} {b}%", "ru": "{n} {b}%", "en": "{n} {b}%"},
+    "m_settings": {"uk": "Налаштування…", "ru": "Настройки…", "en": "Settings…"},
+    "rename_dev": {"uk": "✏️ Перейменувати пристрій…", "ru": "✏️ Переименовать устройство…", "en": "✏️ Rename device…"},
+    "rename_port": {"uk": "✏️ Перейменувати порт…", "ru": "✏️ Переименовать порт…", "en": "✏️ Rename port…"},
+    "new_name": {"uk": "Нова назва (порожньо — як було):", "ru": "Новое название (пусто — как было):", "en": "New name (empty — default):"},
+    "s_general": {"uk": "Загальні", "ru": "Общие", "en": "General"},
+    "s_ports": {"uk": "Порти", "ru": "Порты", "en": "Ports"},
+    "s_devices": {"uk": "Пристрої", "ru": "Устройства", "en": "Devices"},
+    "s_theme": {"uk": "Тема", "ru": "Тема", "en": "Theme"},
+    "s_scale": {"uk": "Масштаб", "ru": "Масштаб", "en": "Scale"},
+    "s_sound": {"uk": "Звук при підключенні", "ru": "Звук при подключении", "en": "Sound on plug/unplug"},
+    "s_anim": {"uk": "Анімації", "ru": "Анимации", "en": "Animations"},
+    "s_port": {"uk": "Порт", "ru": "Порт", "en": "Port"},
+    "s_name": {"uk": "Назва", "ru": "Название", "en": "Name"},
+    "s_device": {"uk": "Пристрій", "ru": "Устройство", "en": "Device"},
+    "s_my_name": {"uk": "Моя назва", "ru": "Моё название", "en": "My name"},
+    "s_hint_dev": {"uk": "Пристрої впізнаються за серійним номером. Порожня назва — заводська.",
+                   "ru": "Устройства узнаются по серийному номеру. Пустое название — заводское.",
+                   "en": "Devices are recognised by serial number. Empty name — factory name."},
+    "theme_thinkpad": {"uk": "ThinkPad (чорна)", "ru": "ThinkPad (чёрная)", "en": "ThinkPad (black)"},
+    "theme_ibm": {"uk": "IBM (червоний, синій, зелений)", "ru": "IBM (красный, синий, зелёный)", "en": "IBM (red, blue, green)"},
+    "theme_light": {"uk": "Світла", "ru": "Светлая", "en": "Light"},
+    "close": {"uk": "Закрити", "ru": "Закрыть", "en": "Close"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
@@ -199,6 +221,12 @@ def load_config():
     cfg.setdefault("hide_dock", False)
     cfg.setdefault("lid_blink", False)
     cfg.setdefault("lid_on", False)
+    cfg.setdefault("names", {})       # "vid:pid:serial" -> своё имя устройства
+    cfg.setdefault("seen", {})        # "vid:pid:serial" -> имя от производителя (для окна настроек)
+    cfg.setdefault("sound", True)
+    cfg.setdefault("theme", "thinkpad")
+    cfg.setdefault("ui_scale", 1.0)
+    cfg.setdefault("animations", True)
     return cfg
 
 
@@ -233,6 +261,7 @@ def usb_devices():
             "product": rd(f"{p}/product"), "maker": rd(f"{p}/manufacturer"),
             "speed": rd(f"{p}/speed"), "cls": rd(f"{p}/bDeviceClass"),
             "ifcls": rd(ifc[0]) if ifc else "", "removable": rd(f"{p}/removable"), "ifaces": ifaces,
+            "serial": rd(f"{p}/serial"),
         }
     return devs
 
@@ -308,6 +337,10 @@ def phone_modes(d):
         elif cls == "01" and sub == "03":
             modes.append("mode_midi")
     return list(dict.fromkeys(modes))
+
+
+def dev_key(d):
+    return f"{d['vid']}:{d['pid']}:{d.get('serial') or '-'}"
 
 
 def usb_icon(d):
@@ -573,6 +606,34 @@ def lid_closed():
     return any("closed" in rd(p) for p in glob.glob("/proc/acpi/button/lid/*/state"))
 
 
+SOUND_DIR = os.path.expanduser("~/.cache/dockwatch")
+
+
+def chime(kind="in"):
+    """Короткий сигнал: «вверх» при подключении, «вниз» при отключении. pw-play/paplay, без зависимостей."""
+    import math
+    import struct
+    import wave
+    f = os.path.join(SOUND_DIR, f"{kind}.wav")
+    if not os.path.exists(f):
+        os.makedirs(SOUND_DIR, exist_ok=True)
+        rate, tones = 44100, ((880, 1320) if kind == "in" else (1320, 880))
+        frames = bytearray()
+        for hz in tones:
+            n = int(rate * 0.07)
+            for t in range(n):
+                env = min(1, t / 300) * min(1, (n - t) / 900)
+                frames += struct.pack("<h", int(9000 * env * math.sin(2 * math.pi * hz * t / rate)))
+        with wave.open(f, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate); w.writeframes(bytes(frames))
+    for player in (["pw-play", f], ["paplay", f], ["aplay", "-q", f]):
+        try:
+            subprocess.Popen(player, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+        except OSError:
+            continue
+
+
 HISTORY = os.path.expanduser("~/.local/share/dockwatch/history.log")
 
 
@@ -700,6 +761,8 @@ def sd_cards():
     """Карты памяти в кард-ридере: размер, метка, где смонтирована, скорость чтения/записи."""
     out = []
     for b in sorted(glob.glob("/sys/block/mmcblk[0-9]")):
+        if rd(f"{b}/device/type") not in ("SD", "SDIO"):
+            continue  # встроенная eMMC — не карта памяти
         size = int(rd(f"{b}/size", "0") or 0) * 512
         if not size:
             continue
@@ -783,7 +846,7 @@ def snapshot(cfg=None):
             groups.append(dict(g, owner=where, title=pick(g.get("title", g["id"]))))
         for p in prof.get("ports", []):
             lab = p.get("label_docked") if docked and p.get("label_docked") else p.get("label", p["id"])
-            ports[p["id"]] = dict(p, owner=where, label=cfg["labels"].get(p["id"]) or pick(lab),
+            ports[p["id"]] = dict(p, owner=where, label=cfg["labels"].get(p["id"]) or pick(lab), label_default=pick(lab),
                                   busy=False, items=[], stats=[], disks=[], rate=0.0)
     loose, loose_stats = [], []
     show = cfg.get("show_stats", True)
@@ -796,10 +859,16 @@ def snapshot(cfg=None):
     def by_role(role, owner):
         return next((pid for pid, p in ports.items() if p.get("role") == role and p["owner"] == owner), None)
 
+    seen_dirty = False
     for d in usb:
         nm = d["product"] or d["maker"] or d["vid"] + ":" + d["pid"]
         if d["maker"] and d["product"] and d["maker"].split()[0].lower() not in d["product"].lower() and len(d["maker"]) < 16:
             nm = f"{d['maker']} {d['product']}"
+        k = dev_key(d)
+        if cfg["seen"].get(k) != nm:
+            cfg["seen"][k] = nm
+            seen_dirty = True
+        nm = cfg["names"].get(k) or nm
         item = f"{usb_icon(d)} {nm}"
         modes = phone_modes(d)
         if modes:
@@ -812,6 +881,7 @@ def snapshot(cfg=None):
         if pid in ports:
             put(pid, item, stat)
             ports[pid]["disks"] += usb_disks(d["name"])
+            ports[pid].setdefault("devkeys", []).append(dev_key(d))
             ports[pid]["rate"] += spd
         else:
             loose.append(f"{item}  [{tr('on_dock') if d['dock'] else tr('on_laptop')} · {d['key']}]")
@@ -846,6 +916,11 @@ def snapshot(cfg=None):
             put(pid, item, stat)
         else:
             loose.append(item); loose_stats.append(stat if show else "")
+    if seen_dirty:
+        try:
+            save_config(cfg)
+        except OSError:
+            pass
     card = by_role("card", "laptop")
     for item, stat, spd, disk in sd_cards():
         if card:
@@ -906,6 +981,16 @@ def diff(old, new):
     for x in sorted(set(map(strip, old["loose"])) - set(map(strip, new["loose"]))):
         ev.append(f"⚫ {tr('ev_off')} {x}")
     return ev
+
+
+def dump_json():
+    s = snapshot()
+    out = {"docked": s["docked"], "busy": s["busy"], "total": s["total"],
+           "dock": (s["dock"] or {}).get("name"), "laptop": (s["laptop"] or {}).get("name"),
+           "ports": [{"id": p["id"], "label": p["label"], "group": p["g"], "busy": p["busy"], "items": p["items"],
+                      "stats": p["stats"]} for p in s["ports"].values()],
+           "loose": s["loose"], "media": s["media"], "sensors": s["sensors"], "power": s["power"]}
+    print(json.dumps(out, ensure_ascii=False))
 
 
 def dump():
@@ -1078,18 +1163,48 @@ def qt_app(mode):
         from PySide6.QtNetwork import QLocalServer, QLocalSocket
         from PySide6.QtGui import (QAction, QActionGroup, QBrush, QColor, QFont, QFontMetricsF, QIcon, QLinearGradient,
                                    QPainter, QPainterPath, QPen, QPixmap, QRadialGradient)
-        from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
+        from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
+                                       QFormLayout, QHeaderView, QInputDialog, QLabel, QMenu, QSystemTrayIcon,
+                                       QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
     except ImportError:
         sys.exit(tr("need_qt"))
 
-    RED = QColor("#E2231A")
-    BODY = QColor("#1b1b1c")
-    EDGE = QColor("#2c2c2e")
-    HOLE = QColor("#070707")
-    METAL = QColor("#8e9196")
-    INK = QColor("#6d6f73")
-    TXT = QColor("#e9e9ea")
-    DIM = QColor("#7c7e82")
+    THEMES = {
+        "thinkpad": dict(red="#E2231A", body="#1b1b1c", edge="#2c2c2e", hole="#070707", metal="#8e9196", ink="#6d6f73",
+                         txt="#e9e9ea", dim="#7c7e82", bg="#111112", body_hi="#222224", body_lo="#151516", stat="#b5565a", line="#a1121a"),
+        "ibm": dict(red="#E2231A", body="#1c1e22", edge="#2d3036", hole="#070708", metal="#8e9196", ink="#6d7078",
+                    txt="#e8eaee", dim="#7d818a", bg="#101215", body_hi="#24272c", body_lo="#16181c", stat="#6f9fe0", line="#1F70C1",
+                    blue="#1F70C1", green="#2EA44F"),
+        "light": dict(red="#E2231A", body="#f2f2f3", edge="#c9c9cc", hole="#f7f7f8", metal="#b4b4b8", ink="#8a8a8e",
+                      txt="#1d1d1f", dim="#6e6e73", bg="#fafafa", body_hi="#ffffff", body_lo="#e4e4e7", stat="#c0392b", line="#E2231A",
+                      port_edge="#b9b9be", pin="#d4d4d8", key="#ffffff", key_edge="#cfcfd3", led_off="#d8d8dc", lens="#e9e9ec",
+                      led_on="#f5a623"),
+    }
+    RED = BODY = EDGE = HOLE = METAL = INK = TXT = DIM = BGC = BODY_HI = BODY_LO = STATC = LINEC = None
+    PORT_EDGE = PIN = KEYC = KEY_EDGE = LED_OFF = LENS = LED_ON = None
+    ACCENT = {}  # вид разъёма -> цвет подсветки (в теме IBM — три цвета, иначе везде красный)
+    THEME = {"name": "thinkpad"}
+
+    def accent(kind):
+        return ACCENT.get(kind, RED)
+
+    def apply_theme(name):
+        nonlocal RED, BODY, EDGE, HOLE, METAL, INK, TXT, DIM, BGC, BODY_HI, BODY_LO, STATC, LINEC
+        nonlocal PORT_EDGE, PIN, KEYC, KEY_EDGE, LED_OFF, LENS, LED_ON
+        base = dict(port_edge="#3a3a3d", pin="#2a2a2c", key="#0f0f10", key_edge="#2e2e30", led_off="#333333", lens="#0b0b0c",
+                    led_on="#f4f4f4")
+        t = {k: QColor(v) for k, v in {**base, **THEMES.get(name, THEMES["thinkpad"])}.items()}
+        PORT_EDGE, PIN, KEYC, KEY_EDGE, LED_OFF, LENS = t["port_edge"], t["pin"], t["key"], t["key_edge"], t["led_off"], t["lens"]
+        LED_ON = t["led_on"]
+        RED, BODY, EDGE, HOLE, METAL, INK = t["red"], t["body"], t["edge"], t["hole"], t["metal"], t["ink"]
+        TXT, DIM, BGC, BODY_HI, BODY_LO, STATC, LINEC = t["txt"], t["dim"], t["bg"], t["body_hi"], t["body_lo"], t["stat"], t["line"]
+        THEME["name"] = name if name in THEMES else "thinkpad"
+        ACCENT.clear()
+        if "blue" in t:
+            b, g = t["blue"], t["green"]
+            ACCENT.update(usb=b, usbc=b, card=b, hdmi=b, dp=b, vga=b, dockport=b, rj45=g, audio=g, dc=RED)
+
+    apply_theme(load_config().get("theme", "thinkpad"))
     UI_FONT = "Liberation Sans"
     BASE_W = 1100.0  # logical width: bigger windows scale everything up
 
@@ -1106,7 +1221,7 @@ def qt_app(mode):
         rnd = random.Random(seed)
         for _ in range(w * h // 6):
             c = rnd.randint(-7, 7)
-            q.setPen(QColor(max(0, base.red() + c), max(0, base.green() + c), max(0, base.blue() + c)))
+            q.setPen(QColor(*(min(255, max(0, v + c)) for v in (base.red(), base.green(), base.blue()))))
             q.drawPoint(rnd.randrange(w), rnd.randrange(h))
         q.end()
         return pm
@@ -1132,6 +1247,9 @@ def qt_app(mode):
             self.scale = 1.0
             self.logos = {n: asset(f"{n}.png") for n in ("thinkpad", "ibm", "lenovo")}
             self.hist = {}
+            self.lit = {}        # pid -> когда порт загорелся (для плавного зажигания)
+            self.fan_angle = 0.0
+            self.anim_t = time.monotonic()
             self.profile = power_profile()
             self.setMouseTracking(True)
 
@@ -1141,15 +1259,30 @@ def qt_app(mode):
             for pid, pt in s["ports"].items():
                 if pt["busy"]:
                     self.hist.setdefault(pid, deque(maxlen=60)).append(pt.get("rate", 0.0))
+                    self.lit.setdefault(pid, time.monotonic())
                 else:
                     self.hist.pop(pid, None)
+                    self.lit.pop(pid, None)
             for e in events:
                 self.log.insert(0, time.strftime("%H:%M:%S  ") + e)
             self.log = self.log[:5]
             self.blink ^= 1
             self.update()
 
-        def connector(self, q, kind, c, busy, k=1.0):
+        def dark(self):
+            return BGC.lightness() < 100  # логотипы с обоев белые — на светлых темах рисуем надпись
+
+        def animating(self):
+            if not load_config().get("animations", True):
+                return False
+            now = time.monotonic()
+            fans = (self.s.get("sensors") or {}).get("fans") or []
+            return any(now - t < 0.8 for t in self.lit.values()) or any(fans)
+
+        def connector(self, q, kind, c, busy, k=1.0, pid=None):
+            fade = 1.0
+            if busy and pid in self.lit and load_config().get("animations", True):
+                fade = min(1.0, (time.monotonic() - self.lit[pid]) / 0.6)
             q.save()
             q.translate(c)
             q.scale(k, k)
@@ -1184,7 +1317,7 @@ def qt_app(mode):
             elif kind == "card":
                 # сверху — лоток SIM с отверстием для скрепки, снизу — тонкий слот microSD (светится только он)
                 tray = QPainterPath(); tray.addRoundedRect(QRectF(-22, -11, 44, 10), 3, 3)
-                q.setPen(QPen(QColor("#3a3a3d"), 1.6)); q.setBrush(QColor("#141415")); q.drawPath(tray)
+                q.setPen(QPen(PORT_EDGE, 1.6)); q.setBrush(BODY_LO); q.drawPath(tray)
                 q.setPen(Qt.NoPen); q.setBrush(HOLE); q.drawEllipse(QPointF(-15, -6), 1.6, 1.6)
                 path.addRoundedRect(QRectF(-22, 3, 44, 5), 2, 2)
                 inner.addRect(QRectF(-18, 4.6, 36, 1.8))
@@ -1194,38 +1327,56 @@ def qt_app(mode):
                 if kind == "card":
                     q.translate(0, 5.5)  # свечение — вокруг слота карты, а не лотка SIM
                 g = QRadialGradient(QPointF(0, 0), 46)
-                cg = QColor(RED); cg.setAlpha(95); g.setColorAt(0, cg)
-                cg = QColor(RED); cg.setAlpha(0); g.setColorAt(1, cg)
+                cg = QColor(accent(kind)); cg.setAlpha(int(95 * fade)); g.setColorAt(0, cg)
+                cg = QColor(accent(kind)); cg.setAlpha(0); g.setColorAt(1, cg)
                 q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawEllipse(QPointF(0, 0), 46, 30)
                 if kind == "card":
                     q.translate(0, -5.5)
-            q.setPen(QPen(QColor("#3a3a3d"), 1.6)); q.setBrush(HOLE); q.drawPath(path)
-            q.setPen(Qt.NoPen); q.setBrush(RED if busy else QColor("#2a2a2c")); q.drawPath(inner)
+            q.setPen(QPen(PORT_EDGE, 1.6)); q.setBrush(HOLE); q.drawPath(path)
+            q.setPen(Qt.NoPen); q.setBrush(accent(kind) if busy else PIN); q.drawPath(inner)
             if kind == "vga":
                 for sx in (-34, 34):
                     q.setBrush(METAL); q.setPen(QPen(QColor("#555"), 1)); q.drawEllipse(QPointF(sx, 0), 5, 5)
                     q.setBrush(HOLE); q.drawEllipse(QPointF(sx, 0), 2, 2)
             if kind == "rj45":
                 for lx, on, col in ((-13, busy, QColor("#3ddc84")), (13, busy and self.blink, QColor("#ffb020"))):
-                    q.setPen(Qt.NoPen); q.setBrush(col if on else QColor("#333")); q.drawRect(QRectF(lx - 3, -19, 6, 3))
+                    q.setPen(Qt.NoPen); q.setBrush(col if on else LED_OFF); q.drawRect(QRectF(lx - 3, -19, 6, 3))
             q.restore()
 
         def tower(self, q, r):
-            q.setPen(QPen(EDGE, 1.5)); q.setBrush(QColor("#161617")); q.drawRoundedRect(r, 6, 6)
+            q.setPen(QPen(EDGE, 1.5)); q.setBrush(BODY_LO); q.drawRoundedRect(r, 6, 6)
             c = QPointF(r.center().x(), r.top() + r.height() * 0.32)
             if self.s["docked"]:
                 g = QRadialGradient(c, 22); cg = QColor(RED); cg.setAlpha(120); g.setColorAt(0, cg)
                 cg.setAlpha(0); g.setColorAt(1, cg); q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawEllipse(c, 22, 22)
-            q.setPen(QPen(QColor("#3a3a3d"), 2)); q.setBrush(HOLE); q.drawEllipse(c, 10, 10)
+            q.setPen(QPen(PORT_EDGE, 2)); q.setBrush(HOLE); q.drawEllipse(c, 10, 10)
             q.setPen(QPen(RED if self.s["docked"] else QColor("#444"), 2))
             q.drawArc(QRectF(c.x() - 5, c.y() - 5, 10, 10), 120 * 16, 300 * 16)
             q.drawLine(QPointF(c.x(), c.y() - 7), QPointF(c.x(), c.y() - 1))
             k = QPointF(r.center().x(), r.top() + r.height() * 0.74)
-            q.setPen(QPen(QColor("#2e2e30"), 3)); q.setBrush(QColor("#0d0d0e")); q.drawEllipse(k, 11, 11)
+            q.setPen(QPen(KEY_EDGE, 3)); q.setBrush(KEYC); q.drawEllipse(k, 11, 11)
             q.setPen(QPen(METAL, 2.5)); q.drawLine(QPointF(k.x() - 6, k.y()), QPointF(k.x() + 6, k.y()))
 
+        def ibm_logo(self, q, x, y, h, colors=("#E2231A", "#2EA44F", "#1F70C1")):
+            """Полосатый логотип IBM (8 полос), буквы — красная, зелёная, синяя. y — нижняя линия, h — высота букв."""
+            f = QFont("Liberation Sans"); f.setPixelSize(int(h * 1.38)); f.setBold(True); f.setStretch(125)
+            fm = QFontMetricsF(f)
+            stripes = QPainterPath()
+            bar = h / 15.0  # 8 полос и 7 зазоров: полоса чуть толще зазора
+            top = y - h
+            for i in range(8):
+                stripes.addRect(QRectF(x - 2, top + i * bar * 2 - bar * 0.15, fm.horizontalAdvance("IBM") + 8, bar * 1.3))
+            cx = x
+            for ch, col in zip("IBM", colors):
+                path = QPainterPath(); path.addText(QPointF(cx, y), f, ch)
+                q.setPen(Qt.NoPen); q.setBrush(QColor(col)); q.drawPath(path.intersected(stripes))
+                cx += fm.horizontalAdvance(ch) + h * 0.08
+            return cx
+
         def logo(self, q, x, y, size):
-            pm = self.logos.get("thinkpad")
+            if THEME["name"] == "ibm":  # тема IBM: вместо ThinkPad — полосатый IBM в трёх цветах
+                return self.ibm_logo(q, x, y - 4, size * 1.05)
+            pm = self.logos.get("thinkpad") if self.dark() and THEME["name"] != "ibm" else None
             if pm:
                 h = size * 1.55
                 q.drawPixmap(QRectF(x, y - h * 0.86, pm.width() * h / pm.height(), h), pm, QRectF(pm.rect()))
@@ -1234,12 +1385,18 @@ def qt_app(mode):
             q.drawText(QPointF(x, y), "ThinkPad")
             fm = QFontMetricsF(f)
             xi = x + fm.horizontalAdvance("Th") + fm.horizontalAdvance("i") * 0.62 + size * 0.05
-            q.setPen(Qt.NoPen); q.setBrush(RED); q.drawEllipse(QPointF(xi, y - fm.ascent() * 0.80), size * 0.095, size * 0.095)
+            if THEME["name"] == "ibm":  # как на ThinkPad времён IBM: красный, зелёный, синий квадратики
+                sq = size * 0.11
+                for i, col in enumerate(("#E2231A", "#2EA44F", "#1F70C1")):
+                    q.setPen(Qt.NoPen); q.setBrush(QColor(col))
+                    q.drawRect(QRectF(xi - sq * 1.6 + i * sq * 1.1, y - fm.ascent() * 0.86 - sq / 2, sq, sq))
+            else:
+                q.setPen(Qt.NoPen); q.setBrush(RED); q.drawEllipse(QPointF(xi, y - fm.ascent() * 0.80), size * 0.095, size * 0.095)
             return x + fm.horizontalAdvance("ThinkPad")
 
         def body(self, q, r, g):
             grad = QLinearGradient(r.topLeft(), r.bottomLeft())
-            grad.setColorAt(0, QColor("#222224")); grad.setColorAt(0.12, BODY); grad.setColorAt(1, QColor("#151516"))
+            grad.setColorAt(0, BODY_HI); grad.setColorAt(0.12, BODY); grad.setColorAt(1, BODY_LO)
             q.setPen(QPen(EDGE, 1.5)); q.setBrush(QBrush(grad)); q.drawRoundedRect(r, 7, 7)
             q.setPen(QPen(QColor(255, 255, 255, 14), 1)); q.drawLine(r.left() + 8, r.top() + 1.5, r.right() - 8, r.top() + 1.5)
             if g.get("vents"):
@@ -1247,12 +1404,26 @@ def qt_app(mode):
                 sn = self.s.get("sensors", {"temps": {}, "fans": []})
                 hot = max(sn["temps"].values(), default=0)
                 k = min(1.0, max(0.0, (hot - 45) / 45))  # 45°C — тёмная, 90°C — раскалённая
-                fill = QColor(int(7 + (150 - 7) * k), int(7 + (18 - 7) * k), int(7 + (14 - 7) * k))
-                q.setPen(Qt.NoPen); q.setBrush(fill)
+                h0 = HOLE if BGC.lightness() > 150 else QColor(7, 7, 7)  # на светлой теме решётка светлая
+                fill = QColor(int(h0.red() + (150 - h0.red()) * k), int(h0.green() + (18 - h0.green()) * k), int(h0.blue() + (14 - h0.blue()) * k))
+                if BGC.lightness() > 150:
+                    q.setPen(QPen(PORT_EDGE, 1))
+                else:
+                    q.setPen(Qt.NoPen)
+                q.setBrush(fill)
                 x0, x1 = r.left() + r.width() * a, r.left() + r.width() * b
                 x = x0
                 while x < x1 - 10:
                     q.drawRoundedRect(QRectF(x, r.center().y() - 12, 10, 24), 2, 2); x += 19
+                rpm = max(sn.get("fans") or [0])
+                if rpm:  # маленький вращающийся вентилятор у подписи, скорость — от реальных оборотов
+                    fc = QPointF(x0 + 6, r.bottom() + 27)
+                    q.save(); q.translate(fc); q.rotate(self.fan_angle)
+                    q.setPen(Qt.NoPen); q.setBrush(DIM)
+                    for i in range(4):
+                        q.rotate(90); q.drawEllipse(QRectF(-2.2, -7, 4.4, 7))
+                    q.setBrush(BODY); q.drawEllipse(QPointF(0, 0), 1.8, 1.8)
+                    q.restore()
                 lines = sensors_lines(sn)
                 if lines:  # подпись под решёткой, сама решётка остаётся открытой
                     f = font(11)
@@ -1264,14 +1435,14 @@ def qt_app(mode):
                                    fm.elidedText(t, Qt.ElideRight, x1 - x0))
 
         def key(self, q, k, top, bottom, led):
-            q.setPen(QPen(QColor("#2e2e30"), 1)); q.setBrush(QColor("#0f0f10")); q.drawRoundedRect(k, 4, 4)
+            q.setPen(QPen(KEY_EDGE, 1)); q.setBrush(KEYC); q.drawRoundedRect(k, 4, 4)
             q.setFont(font(10)); q.setPen(TXT); q.drawText(QRectF(k.left() + 6, k.top() + 3, k.width() - 6, 14), Qt.AlignLeft, top)
             q.setFont(font(9)); q.setPen(DIM); q.drawText(QRectF(k.left() + 6, k.bottom() - 15, k.width() - 6, 13), Qt.AlignLeft, bottom)
             c = QPointF(k.right() - 8, k.top() + 8)
             if led:
-                g = QRadialGradient(c, 10); cg = QColor("#f2f2f2"); cg.setAlpha(150)
+                g = QRadialGradient(c, 10); cg = QColor(LED_ON); cg.setAlpha(150)
                 g.setColorAt(0, cg); cg.setAlpha(0); g.setColorAt(1, cg); q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawEllipse(c, 10, 10)
-            q.setPen(Qt.NoPen); q.setBrush(QColor("#f4f4f4") if led is True else QColor("#333") if led is False else QColor("#24242a"))
+            q.setPen(Qt.NoPen); q.setBrush(LED_ON if led is True else LED_OFF)
             q.drawEllipse(c, 2.3, 2.3)
             if led is None:
                 q.setFont(font(8)); q.setPen(DIM); q.drawText(QRectF(c.x() - 5, c.y() - 6, 10, 12), Qt.AlignCenter, "?")
@@ -1286,18 +1457,18 @@ def qt_app(mode):
                 if live:
                     g = QRadialGradient(QPointF(x, cy), 13); cg = QColor(RED); cg.setAlpha(150); g.setColorAt(0, cg)
                     cg.setAlpha(0); g.setColorAt(1, cg); q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawEllipse(QPointF(x, cy), 13, 13)
-                q.setPen(QPen(QColor("#2a2a2c"), 1)); q.setBrush(HOLE); q.drawEllipse(QPointF(x, cy), 3, 3)
+                q.setPen(QPen(PORT_EDGE, 1)); q.setBrush(HOLE if BGC.lightness() < 150 else PIN); q.drawEllipse(QPointF(x, cy), 3, 3)
                 if m.get("mic_muted"):
                     q.setPen(QPen(QColor("#8a8a8d"), 1.3)); q.drawLine(QPointF(x - 6, cy + 6), QPointF(x + 6, cy - 6))
             cam_on = bool(m.get("cam_users"))
-            q.setPen(QPen(QColor("#2a2a2c"), 2)); q.setBrush(QColor("#0b0b0c")); q.drawEllipse(QPointF(cx, cy), 13, 13)
-            q.setBrush(QColor("#151517")); q.drawEllipse(QPointF(cx, cy), 8, 8)
+            q.setPen(QPen(PORT_EDGE, 2)); q.setBrush(LENS); q.drawEllipse(QPointF(cx, cy), 13, 13)
+            q.setBrush(BODY_LO); q.drawEllipse(QPointF(cx, cy), 8, 8)
             q.setPen(Qt.NoPen); q.setBrush(RED if m.get("cam_present") else QColor("#333")); q.drawEllipse(QPointF(cx, cy), 2.6, 2.6)
             lx = cx + 26
             if cam_on:
                 g = QRadialGradient(QPointF(lx, cy), 12); cg = QColor("#ffffff"); cg.setAlpha(170); g.setColorAt(0, cg)
                 cg.setAlpha(0); g.setColorAt(1, cg); q.setBrush(QBrush(g)); q.drawEllipse(QPointF(lx, cy), 12, 12)
-            q.setBrush(QColor("#fafafa") if cam_on else QColor("#3a3a3c")); q.drawEllipse(QPointF(lx, cy), 2.4, 2.4)
+            q.setBrush(QColor("#fafafa") if cam_on else LED_OFF); q.drawEllipse(QPointF(lx, cy), 2.4, 2.4)
             if not m:
                 return
             mic = tr("muted") if m["mic_muted"] else (tr("recording", x=", ".join(dict.fromkeys(m["mic_users"]))) if m["mic_users"]
@@ -1315,10 +1486,11 @@ def qt_app(mode):
             q.setRenderHint(QPainter.Antialiasing)
             q.setRenderHint(QPainter.SmoothPixmapTransform)
             if self.bg is None or self.bg.size() != self.size():
-                self.bg = texture(self.width(), self.height(), QColor("#111112"))
+                self.bg = texture(self.width(), self.height(), BGC)
             q.drawPixmap(0, 0, self.bg)
             # мягкое масштабирование: на большом экране чуть крупнее, но не во всю ширину (1920 px → ×1.3)
-            self.scale = s = min(1.3, max(1.0, 1 + (self.width() / BASE_W - 1) * 0.4))
+            ui = float(load_config().get("ui_scale", 1.0) or 1.0)
+            self.scale = s = min(1.3, max(1.0, 1 + (self.width() / BASE_W - 1) * 0.4)) * ui
             q.scale(s, s)
             W, H = self.width() / s, self.height() / s
             # header
@@ -1326,7 +1498,7 @@ def qt_app(mode):
             q.setFont(font(12, italic=True)); q.setPen(DIM)
             q.drawText(QPointF(26, 76), f"{tr('docked') if self.s['docked'] else tr('undocked')}  ·  "
                                         f"{tr('busy', n=self.s['busy'], m=self.s['total'])}")
-            lp = self.logos.get("lenovo")
+            lp = self.logos.get("lenovo") if self.dark() and THEME["name"] != "ibm" else None
             if lp:
                 q.drawPixmap(QRectF(W - 24 - 100, 22, 100, 100 * lp.height() / lp.width()), lp, QRectF(lp.rect()))
             p = self.s["power"]
@@ -1378,15 +1550,15 @@ def qt_app(mode):
                             continue
                         cx, cy = r.left() + r.width() * pt["x"], r.center().y() + 3
                         busy = pt["busy"]
-                        self.connector(q, pt["kind"], QPointF(cx, cy), busy, kz)
+                        self.connector(q, pt["kind"], QPointF(cx, cy), busy, kz, pt["id"])
                         q.setFont(font(10)); q.setPen(INK)
                         q.drawText(QRectF(cx - 40, r.top() + 3, 80, 14), Qt.AlignCenter, pt.get("mark", ""))
-                        q.setFont(font(11, bold=busy)); q.setPen(RED if busy else DIM)
+                        q.setFont(font(11, bold=busy)); q.setPen(accent(pt["kind"]) if busy else DIM)
                         q.drawText(QRectF(cx - 50, r.bottom() + 3, 100, 16), Qt.AlignCenter, pt["label"])
                         st = next((x for x in pt["stats"] if x), "")
                         if st and self.s["show_stats"]:
                             short = st.split(" · ")[-1] if len(st) > 18 else st
-                            q.setFont(font(9)); q.setPen(QColor("#b5565a"))
+                            q.setFont(font(9)); q.setPen(STATC)
                             q.drawText(QRectF(cx - 60, r.bottom() + 18, 120, 14), Qt.AlignCenter, short)
                         self.rects[pt["id"]] = QRectF(cx - 36 * kz, r.top(), 72 * kz, r.height() + 20)
                     if g.get("tower"):
@@ -1399,7 +1571,7 @@ def qt_app(mode):
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(28, y + 6), tr("connected"))
             q.setFont(font(13))
             yy = y + 28
-            rows = [(pt["label"], it, st, RED) for pt in self.s["ports"].values() for it, st in zip(pt["items"], pt["stats"])]
+            rows = [(pt["label"], it, st, accent(pt["kind"])) for pt in self.s["ports"].values() for it, st in zip(pt["items"], pt["stats"])]
             pid_of = {(pt["label"], pt["items"][0]): pt["id"] for pt in self.s["ports"].values() if pt["items"]}
             rows += [("?", it, st, QColor("#c9a227")) for it, st in zip(self.s["loose"], self.s["loose_stats"])]
             if self.s.get("dock_hidden"):
@@ -1417,7 +1589,7 @@ def qt_app(mode):
                 q.setPen(TXT); q.drawText(QPointF(140, yy), fm.elidedText(it, Qt.ElideRight, colw))
                 if st:  # потребление/нагрузка — отдельной строкой под устройством
                     yy += 16
-                    q.setFont(font(11)); q.setPen(QColor("#b5565a"))
+                    q.setFont(font(11)); q.setPen(STATC)
                     fm11 = QFontMetricsF(font(11))
                     st_e = fm11.elidedText(st, Qt.ElideRight, colw - 90)
                     q.drawText(QPointF(150, yy), st_e)
@@ -1439,12 +1611,15 @@ def qt_app(mode):
             q.restore(); W = W_full
             # footer like the wallpaper: IBM — red line — Technologies and Design
             fy = H - 24
-            ib = self.logos.get("ibm")
-            if ib:
+            ib = self.logos.get("ibm") if self.dark() and THEME["name"] != "ibm" else None
+            if THEME["name"] == "ibm":
+                self.ibm_logo(q, 26, fy + 8, 16, (LINEC.name(),) * 3)
+                ib = True
+            elif ib:
                 q.drawPixmap(QRectF(26, fy - 11, ib.width() * 22 / ib.height(), 22), ib, QRectF(ib.rect()))
-            q.setPen(QPen(QColor("#a1121a"), 1))
+            q.setPen(QPen(LINEC, 1))
             q.drawLine(QPointF(78 if ib else 26, fy), QPointF(W - 230, fy)); q.drawLine(QPointF(W - 230, fy), QPointF(W - 230, fy - 14))
-            q.setFont(font(12, italic=True)); q.setPen(QColor("#cfcfd1"))
+            q.setFont(font(12, italic=True)); q.setPen(TXT)
             q.drawText(QRectF(W - 222, fy - 16, 210, 18), Qt.AlignLeft, "Technologies and Design")
             q.end()
 
@@ -1453,11 +1628,15 @@ def qt_app(mode):
             pos = e.pos() / self.scale
             hit = next((k for k, r in self.rects.items() if r.contains(pos)), None)
             disks = list(dict.fromkeys(self.s["ports"][hit]["disks"])) if hit else []
-            if disks:
+            if hit:
                 pt = self.s["ports"][hit]
                 m.addSection(pt["label"])
-                m.addAction(tr("open_files"), lambda: [open_disk(d) for d in disks])
-                m.addAction(tr("eject"), lambda: do_eject(pt["label"], disks))
+                if disks:
+                    m.addAction(tr("open_files"), lambda: [open_disk(d) for d in disks])
+                    m.addAction(tr("eject"), lambda: do_eject(pt["label"], disks))
+                for dk in dict.fromkeys(pt.get("devkeys", [])):
+                    m.addAction(tr("rename_dev") + f"  ({load_config()['seen'].get(dk, dk)})", lambda d=dk: rename("names", d))
+                m.addAction(tr("rename_port"), lambda p_=hit: rename("labels", p_))
                 m.addSeparator()
             populate(m, in_window=True)
             m.exec(e.globalPos())
@@ -1523,6 +1702,86 @@ def qt_app(mode):
             QTimer.singleShot(i * 220, lambda on=(i % 2 == 0) != was: lid_dot(on))
         QTimer.singleShot(n * 2 * 220, lambda: lid_dot(was))
 
+    def rename(section, key):
+        cfg = load_config()
+        cur = cfg[section].get(key, "")
+        default = cfg["seen"].get(key, key) if section == "names" else next(
+            (pick(p.get("label", p["id"])) for prof in (view.s["dock"], view.s["laptop"]) if prof
+             for p in prof.get("ports", []) if p["id"] == key), key)
+        text, ok = QInputDialog.getText(view, "dockwatch", f"{default}\n{tr('new_name')}", text=cur)
+        if ok:
+            cfg = load_config()
+            if text.strip():
+                cfg[section][key] = text.strip()
+            else:
+                cfg[section].pop(key, None)
+            save_config(cfg)
+            state["prev"] = None
+            tick()
+
+    def settings():
+        cfg = load_config()
+        dlg = QDialog(view)
+        dlg.setWindowTitle("dockwatch — " + tr("m_settings").rstrip("…"))
+        dlg.resize(620, 480)
+        tabs = QTabWidget(dlg)
+        # общие
+        gen = QWidget(); form = QFormLayout(gen)
+        lang = QComboBox(); [lang.addItem(n, c) for c, n in (("uk", "Українська"), ("ru", "Русский"), ("en", "English"))]
+        lang.setCurrentIndex(LANGS.index(LANG))
+        theme = QComboBox(); [theme.addItem(tr(f"theme_{t}"), t) for t in THEMES]
+        theme.setCurrentIndex(list(THEMES).index(cfg.get("theme", "thinkpad")) if cfg.get("theme") in THEMES else 0)
+        scale = QDoubleSpinBox(); scale.setRange(0.8, 1.6); scale.setSingleStep(0.05); scale.setValue(float(cfg.get("ui_scale", 1.0)))
+        form.addRow(tr("m_lang"), lang); form.addRow(tr("s_theme"), theme); form.addRow(tr("s_scale"), scale)
+        checks = {}
+        opts = [("show_stats", "m_stats"), ("hide_dock", "m_hidedock"), ("sound", "s_sound"), ("animations", "s_anim")]
+        if lid_dot_writable():
+            opts += [("lid_blink", "m_lid"), ("lid_on", "m_lid_on")]
+        for opt, key in opts:
+            c = QCheckBox(tr(key)); c.setChecked(bool(cfg.get(opt))); form.addRow(c); checks[opt] = c
+        auto = QCheckBox(tr("m_autostart")); auto.setChecked(autostart()); form.addRow(auto)
+        tabs.addTab(gen, tr("s_general"))
+        # порты
+        ports = [(pid, p) for pid, p in view.s["ports"].items()]
+        pt = QTableWidget(len(ports), 2); pt.setHorizontalHeaderLabels([tr("s_port"), tr("s_name")])
+        pt.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        for i, (pid, p) in enumerate(ports):
+            gt = next((g["title"] for g in view.s["groups"] if g["id"] == p["g"]), p["g"])
+            it = QTableWidgetItem(f"{p.get('label_default', pid)}  ·  {gt}"); it.setFlags(Qt.ItemIsEnabled); pt.setItem(i, 0, it)
+            pt.setItem(i, 1, QTableWidgetItem(cfg["labels"].get(pid, "")))
+        tabs.addTab(pt, tr("s_ports"))
+        # устройства
+        seen = sorted(cfg["seen"].items(), key=lambda kv: kv[1].lower())
+        dw = QWidget(); dl = QVBoxLayout(dw); dl.addWidget(QLabel(tr("s_hint_dev")))
+        dt = QTableWidget(len(seen), 2); dt.setHorizontalHeaderLabels([tr("s_device"), tr("s_my_name")])
+        dt.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        for i, (k, nm) in enumerate(seen):
+            it = QTableWidgetItem(nm); it.setToolTip(k); it.setFlags(Qt.ItemIsEnabled); dt.setItem(i, 0, it)
+            dt.setItem(i, 1, QTableWidgetItem(cfg["names"].get(k, "")))
+        dl.addWidget(dt); tabs.addTab(dw, tr("s_devices"))
+        lay = QVBoxLayout(dlg); lay.addWidget(tabs)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel); lay.addWidget(bb)
+        bb.accepted.connect(dlg.accept); bb.rejected.connect(dlg.reject)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        cfg = load_config()
+        for opt, c in checks.items():
+            cfg[opt] = c.isChecked()
+        cfg["theme"] = theme.currentData(); cfg["ui_scale"] = round(scale.value(), 2)
+        for i, (pid, _) in enumerate(ports):
+            v = (pt.item(i, 1).text() if pt.item(i, 1) else "").strip()
+            cfg["labels"].pop(pid, None) if not v else cfg["labels"].__setitem__(pid, v)
+        for i, (k, _) in enumerate(seen):
+            v = (dt.item(i, 1).text() if dt.item(i, 1) else "").strip()
+            cfg["names"].pop(k, None) if not v else cfg["names"].__setitem__(k, v)
+        save_config(cfg)
+        autostart(auto.isChecked())
+        if cfg.get("lid_on") and lid_dot_writable():
+            lid_dot(True)
+        apply_theme(cfg["theme"])
+        view.bg = None
+        apply(lang=lang.currentData())
+
     def do_eject(label, disks):
         err = next((e for e in (eject_disk(d) for d in disks) if e), "")
         notify(tr("eject_fail", x=label, e=err) if err else tr("ejected", x=label))
@@ -1538,6 +1797,8 @@ def qt_app(mode):
             log_event(e)
         if ev:
             blink()
+            if load_config().get("sound", True):
+                chime("in" if any(e.startswith("🔴") for e in ev) else "out")
         elif load_config().get("lid_on") and lid_dot_writable() and rd(LID_DOT) != "1" and not state.get("blinking_until", 0) > s["ts"]:
             lid_dot(True)  # держим точку включённой (после сна система её гасит)
         # «не забудь флешку»: сняли с дока или закрыли крышку, а носитель всё ещё смонтирован
@@ -1571,6 +1832,7 @@ def qt_app(mode):
         me = os.path.abspath(__file__)
         if not in_window:
             menu.addAction(tr("m_show"), lambda: (view.show(), view.raise_(), view.activateWindow()))
+        menu.addAction(tr("m_settings"), settings)
         menu.addAction(tr("m_tui"), lambda: subprocess.Popen(["konsole", "-e", sys.executable, me, "tui"]))
         menu.addAction(tr("m_cal"), lambda: subprocess.Popen(["konsole", "-e", sys.executable, me, "calibrate"]))
         menu.addSeparator()
@@ -1664,6 +1926,19 @@ def qt_app(mode):
         if mode == "app":
             show_view()
 
+    def anim_tick():
+        if view.isVisible() and view.animating():
+            now = time.monotonic()
+            rpm = max((view.s.get("sensors") or {}).get("fans") or [0])
+            view.fan_angle = (view.fan_angle + rpm / 60 * 360 * (now - view.anim_t) * 0.04) % 360
+            view.anim_t = now
+            view.update()
+        else:
+            view.anim_t = time.monotonic()
+
+    anim = QTimer()
+    anim.timeout.connect(anim_tick)
+    anim.start(50)
     timer = QTimer()
     timer.timeout.connect(tick)
     timer.start(1000)
@@ -1678,11 +1953,11 @@ def qt_app(mode):
 def main():
     global LANG
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", nargs="?", default="app", choices=["app", "tray", "gui", "tui", "calibrate", "dump"])
+    ap.add_argument("mode", nargs="?", default="app", choices=["app", "tray", "gui", "tui", "calibrate", "dump", "json"])
     ap.add_argument("--lang", choices=LANGS)
     a = ap.parse_args()
     LANG = detect_lang(load_config(), a.lang)
-    {"tui": tui, "calibrate": calibrate, "dump": dump}.get(a.mode, lambda: qt_app(a.mode))()
+    {"tui": tui, "calibrate": calibrate, "dump": dump, "json": dump_json}.get(a.mode, lambda: qt_app(a.mode))()
 
 
 if __name__ == "__main__":

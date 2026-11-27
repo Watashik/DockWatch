@@ -1,0 +1,29 @@
+{
+  "id": "lenovo-thinkpad-usb-c-dock-gen2-40as",
+  "name": "ThinkPad USB-C Dock Gen 2 (40AS) — draft",
+  "draft": true,
+  "note": "Layout from the spec sheet, not verified on real hardware. Send a photo + lsusb to fix it.",
+  "match": {"usb_hubs": []},
+  "usb_hubs": {},
+  "groups": [
+    {"id": "front", "row": 0, "w": 0.32, "height": 70,
+     "title": {"uk": "USB-C Dock Gen 2 · спереду", "ru": "USB-C Dock Gen 2 · спереди", "en": "USB-C Dock Gen 2 · front"}},
+    {"id": "rear", "row": 0, "w": 0.68, "height": 70,
+     "title": {"uk": "ззаду", "ru": "сзади", "en": "rear"}}
+  ],
+  "ports": [
+    {"id": "f_audio", "kind": "audio", "g": "front", "x": 0.2, "mark": "🎧", "label": "@audio", "role": "jack"},
+    {"id": "f_usb", "kind": "usb", "g": "front", "x": 0.5, "mark": "SS⚡", "label": "USB ⚡"},
+    {"id": "f_usbc", "kind": "usbc", "g": "front", "x": 0.8, "mark": "⇆", "label": "USB-C"},
+    {"id": "power", "kind": "dc", "g": "rear", "x": 0.06, "mark": "⎓", "label": "@power", "role": "power"},
+    {"id": "host", "kind": "usbc", "g": "rear", "x": 0.15, "mark": "💻", "label": "Host"},
+    {"id": "dp1", "kind": "dp", "g": "rear", "x": 0.26, "mark": "D▸", "label": "DP 1", "video": true},
+    {"id": "dp2", "kind": "dp", "g": "rear", "x": 0.37, "mark": "D▸", "label": "DP 2", "video": true},
+    {"id": "hdmi", "kind": "hdmi", "g": "rear", "x": 0.48, "mark": "HDMI", "label": "HDMI", "video": true},
+    {"id": "usb1", "kind": "usb", "g": "rear", "x": 0.59, "mark": "SS", "label": "USB 1"},
+    {"id": "usb2", "kind": "usb", "g": "rear", "x": 0.68, "mark": "SS", "label": "USB 2"},
+    {"id": "usb3", "kind": "usb", "g": "rear", "x": 0.77, "mark": "SS", "label": "USB 3"},
+    {"id": "usb4", "kind": "usb", "g": "rear", "x": 0.85, "mark": "USB", "label": "USB 2.0"},
+    {"id": "eth", "kind": "rj45", "g": "rear", "x": 0.94, "mark": "⊞", "label": "LAN", "role": "eth"}
+  ]
+}

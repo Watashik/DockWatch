@@ -5,6 +5,12 @@ what is plugged into each one, how much power and bandwidth it takes, and pops u
 
 ![screenshot](docs/screenshot.png)
 
+| IBM theme | Light theme |
+|---|---|
+| ![IBM](docs/theme-ibm.png) | ![Light](docs/theme-light.png) |
+
+Screenshots in other languages: [українська](docs/screenshot-uk.png) · [русский](docs/screenshot-ru.png)
+
 **Languages:** українська · русский · English (auto from `$LANG`; switch in the menu or with `--lang`).
 
 ## Features
@@ -21,6 +27,13 @@ what is plugged into each one, how much power and bandwidth it takes, and pops u
 - Connection log (`~/.local/share/dockwatch/history.log`), start at login, power profile switching.
 - ThinkPad extra: blink the red dot on the lid when something is plugged in (needs a small udev rule).
 - A USB-C that is also the dock connector is shown as USB-C when undocked and as the dock when docked.
+- **Settings window**: language, theme, scale, sound, animations, options; rename ports; give your own names to devices
+  (recognised by serial number — right-click a port → *Rename device*).
+- **Themes**: ThinkPad (black, red), IBM (red/green/blue accents and the striped IBM logo), Light (white ports and keys).
+- Smooth glow when a port lights up, a fan icon spinning at the real RPM, a short chime on plug/unplug (can be turned off).
+- **Plasma 6 panel widget**: dock icon with the number of busy ports, click for the list (installed by `install.sh`;
+  right-click the panel → Add Widgets → DockWatch).
+- `dockwatch json` — machine-readable state for scripts and widgets.
 
 ## Views
 | Command | What it does |
@@ -48,7 +61,11 @@ NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-l
 | Type | Model | Profile |
 |---|---|---|
 | Dock | Lenovo ThinkPad Ultra Docking Station (40AJ) | `profiles/docks/lenovo-thinkpad-ultra-dock-40aj.json` |
+| Dock (draft) | Lenovo ThinkPad USB-C Dock Gen 2 (40AS) | `profiles/docks/lenovo-thinkpad-usb-c-dock-gen2-40as.json` |
+| Dock (draft) | Dell WD19 | `profiles/docks/dell-wd19.json` |
 | Laptop | Lenovo ThinkPad L14 Gen 1 | `profiles/laptops/lenovo-thinkpad-l14-gen1.json` |
+
+*Draft* profiles are made from spec sheets and not verified on real hardware; they are only selectable manually in the menu until someone confirms them.
 
 Docks are detected by the VID:PID of their internal USB hubs, laptops by DMI; both can be chosen manually in the menu.
 
@@ -60,7 +77,7 @@ Profiles are plain JSON — copy an existing one:
   `x` — centre as a fraction of the side width, `label`, optional `role` (`power`, `eth`, `dock`, `card`, `jack`),
   `label_docked`, `typec` (e.g. `port0`) and `drm` (e.g. `["HDMI-A-1"]`).
 
-Then run `dockwatch calibrate` once. New profiles are welcome — open an issue with the **New dock / laptop profile** form
+Check it with `python tools/check_profiles.py` (also run by GitHub Actions on every push), then run `dockwatch calibrate` once. New profiles are welcome — open an issue with the **New dock / laptop profile** form
 (photo of the ports + `lsusb`).
 
 ## Config
