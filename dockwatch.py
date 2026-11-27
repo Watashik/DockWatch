@@ -195,6 +195,15 @@ TR = {
     "compat_auto": {"uk": "⚠ автоматична схема — розташування приблизне, можна виправити в редакторі",
                     "ru": "⚠ автоматическая схема — расположение примерное, можно поправить в редакторе",
                     "en": "⚠ automatic layout — positions are approximate, fix them in the editor"},
+    "compat_dock_no": {"uk": "⚠ не підходить до цього ноутбука: у нього немає потрібного роз'єму дока",
+                       "ru": "⚠ не подходит к этому ноутбуку: у него нет подходящего разъёма дока",
+                       "en": "⚠ does not fit this laptop: it has no matching dock connector"},
+    "compat_dock_maybe": {"uk": "⚠ може не підходити до цього ноутбука — підходять: {x}",
+                          "ru": "⚠ может не подходить к этому ноутбуку — подходят: {x}",
+                          "en": "⚠ may not fit this laptop — works with: {x}"},
+    "compat_nousbc": {"uk": "⚠ док під'єднується по USB-C, а в цього ноутбука USB-C немає",
+                      "ru": "⚠ док подключается по USB-C, а у этого ноутбука нет USB-C",
+                      "en": "⚠ this dock connects over USB-C, but this laptop has no USB-C"},
     "usb_slow": {"uk": "⚠ USB 3 працює як USB 2 (порт або кабель)", "ru": "⚠ USB 3 работает как USB 2 (порт или кабель)",
                  "en": "⚠ USB 3 device running at USB 2 speed (port or cable)"},
     "al_slow": {"uk": "{x}: працює на швидкості USB 2 — спробуйте інший порт або кабель",
@@ -1255,7 +1264,7 @@ def snapshot(cfg=None):
     for prof, where in ((dock, "dock"), (laptop, "laptop")):
         if not prof or (where == "dock" and dock_hidden):
             continue
-        warn = compat_note(prof, cfg)
+        warn = (dock_compat(dock, laptop, docked) if where == "dock" else "") or compat_note(prof, cfg)
         for g in prof.get("groups", []):
             groups.append(dict(g, owner=where, title=pick(g.get("title", g["id"]))))
             if warn and not g.get("bezel"):  # предупреждение о совместимости — у первого корпуса профиля
@@ -1447,6 +1456,26 @@ def compat_note(prof, cfg):
     if prof.get("id") in cfg.get("calibrated", []):
         return ""  # уже откалибровано на этой машине
     return tr("compat_photo")
+
+
+def dock_compat(dock, laptop, docked):
+    """Подходит ли док к ноутбуку: механические доки — по разъёму и списку моделей, USB-C — по наличию USB-C."""
+    if not dock or not laptop or docked:
+        return ""  # уже стоит в доке — значит подходит
+    conn = dock.get("connector")
+    if not conn:
+        return ""
+    if conn == "usb-c":
+        return "" if any(p.get("kind") == "usbc" for p in laptop.get("ports", [])) else tr("compat_nousbc")
+    if laptop.get("dock_connector") == conn:
+        return ""
+    names = " ".join([laptop.get("name", "")] + list(laptop.get("match", {}).get("dmi", []))).lower()
+    if any(re.search(r"(^|[^a-z0-9])" + re.escape(m.lower()) + r"($|[^a-z0-9])", names) for m in dock.get("laptops", [])):
+        return ""
+    if not laptop.get("auto"):  # известный ноутбук без такого разъёма
+        return tr("compat_dock_no")
+    models = dock.get("laptops", [])
+    return tr("compat_dock_maybe", x=", ".join(models[:6]) + ("…" if len(models) > 6 else "")) if models else ""
 
 
 def mark_calibrated(cfg, s, owner):

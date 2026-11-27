@@ -1,6 +1,8 @@
 {
   "id": "lenovo-thinkpad-basic-dock-40ag",
   "name": "ThinkPad Basic Dock (40AG) — draft",
+  "connector": "lenovo-cs18",
+  "laptops": ["T480", "T480s", "T580", "X280", "A285", "A485", "L480", "L580", "T490", "T490s", "T590", "X390", "L490", "L590", "P52s", "P43s", "P53s", "T14 Gen 1", "T14 Gen 2", "T15 Gen 1", "T15 Gen 2", "L14 Gen 1", "L14 Gen 2", "L15 Gen 1", "L15 Gen 2", "X13 Gen 1", "P14s Gen 1", "P14s Gen 2", "P15s Gen 1", "P15s Gen 2"],
   "draft": true,
   "note": "Layout from the official photo. USB hub IDs unknown: choose the dock manually in the menu, run calibration, send `dockwatch report` with the dock attached to enable auto-detection. Lenovo/TLP: the CS18 family (40AG/40AH/40AJ) shares the dock audio 17ef:306f; hubs assumed the same as 40AJ (17ef:3070/3071), so it cannot be told apart from 40AJ automatically yet.",
   "match": {"usb_hubs": []},

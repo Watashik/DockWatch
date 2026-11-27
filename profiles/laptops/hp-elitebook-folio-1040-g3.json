@@ -1,6 +1,7 @@
 {
   "id": "hp-elitebook-folio-1040-g3",
   "name": "HP EliteBook Folio 1040 G3",
+  "dock_connector": "hp-ultraslim-2013",
   "match": {
     "dmi": [
       "EliteBook Folio 1040 G3"

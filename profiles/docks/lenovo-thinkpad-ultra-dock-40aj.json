@@ -2,6 +2,8 @@
   "id": "lenovo-thinkpad-ultra-dock-40aj",
   "verified": true,
   "name": "ThinkPad Ultra Dock (40AJ)",
+  "connector": "lenovo-cs18",
+  "laptops": ["T480", "T480s", "T580", "X280", "A285", "A485", "L480", "L580", "T490", "T490s", "T590", "X390", "L490", "L590", "P52s", "P43s", "P53s", "T14 Gen 1", "T14 Gen 2", "T15 Gen 1", "T15 Gen 2", "L14 Gen 1", "L14 Gen 2", "L15 Gen 1", "L15 Gen 2", "X13 Gen 1", "P14s Gen 1", "P14s Gen 2", "P15s Gen 1", "P15s Gen 2"],
   "match": {
     "usb_hubs": [
       [

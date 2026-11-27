@@ -1,6 +1,7 @@
 {
   "id": "lenovo-thinkpad-usb-c-dock-gen2-40as",
   "name": "ThinkPad USB-C Dock Gen 2 (40AS) — draft",
+  "connector": "usb-c",
   "draft": true,
   "note": "Layout from the spec sheet, not verified on real hardware. Send a photo + lsusb to fix it.",
   "match": {"usb_hubs": []},

@@ -2,6 +2,7 @@
   "id": "lenovo-thinkpad-l14-gen1",
   "verified": true,
   "name": "ThinkPad L14 Gen 1",
+  "dock_connector": "lenovo-cs18",
   "match": {
     "dmi": [
       "ThinkPad L14 Gen 1"

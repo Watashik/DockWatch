@@ -1,6 +1,7 @@
 {
   "id": "dell-wd19",
   "name": "Dell WD19 — draft",
+  "connector": "usb-c",
   "draft": true,
   "note": "Layout from the spec sheet, not verified on real hardware. Send a photo + lsusb to fix it.",
   "match": {"usb_hubs": []},

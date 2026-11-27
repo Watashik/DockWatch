@@ -1,6 +1,8 @@
 {
   "id": "hp-ultraslim-dock-2013",
   "name": "HP UltraSlim Docking Station (2013)",
+  "connector": "hp-ultraslim-2013",
+  "laptops": ["Folio 9470m", "Folio 9480m", "Folio 1040 G1", "Folio 1040 G2", "Folio 1040 G3", "820 G1", "820 G2", "820 G3", "820 G4", "840 G1", "840 G2", "840 G3", "840 G4", "850 G1", "850 G2", "850 G3", "850 G4", "740 G1", "750 G1", "745 G2", "755 G2", "ZBook 14 G1", "ZBook 14 G2", "ZBook 15u"],
   "note": "Layout from photos. USB hub IDs for auto-detection are not known yet — choose it in the menu, then send `lsusb` output.",
   "match": {
     "usb_hubs": []
