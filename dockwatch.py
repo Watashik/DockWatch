@@ -1102,9 +1102,12 @@ def snapshot(cfg=None):
                     put(pid, info.split(" · ")[0], info)
     if docked and by_role("dock", "laptop"):
         put(by_role("dock", "laptop"), tr("in_dock"))
-    busy = sum(p["busy"] for p in ports.values())
+    for p in ports.values():
+        if p["kind"] == "led":
+            p["busy"] = {"power": True, "charge": bool(pw["ac"])}.get(p.get("led"), False)
+    busy = sum(p["busy"] for p in ports.values() if p["kind"] != "led")
     return {"docked": docked, "groups": groups, "ports": ports, "loose": loose, "loose_stats": loose_stats,
-            "busy": busy, "total": len(ports), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden,
+            "busy": busy, "total": sum(1 for p in ports.values() if p["kind"] != "led"), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden,
             "show_stats": show, "sensors": sensors(), "media": media_state(),
             "battery": battery_info(), "net": net_info(), "lid_closed": lid_closed(), "os": OS_INFO, "ts": time.time()}
 
@@ -1300,7 +1303,7 @@ def tui():
         prev, log = None, []
         glyph = {"usb": "▭", "usbc": "⊂⊃", "vga": "▽", "dp": "◺", "hdmi": "⬡", "dc": "▣", "rj45": "⊞",
                  "audio": "◉", "card": "▬", "dockport": "⊂▭⊃", "barrel": "◎", "sidedock": "▮", "smartcard": "▬",
-                 "sim": "|", "lock": "🔒", "sdslot": "▬", "barrel_led": "◎|", "barrel_dot": "·◎"}
+                 "sim": "|", "lock": "🔒", "sdslot": "▬", "barrel_led": "◎|", "barrel_dot": "·◎", "led": "•"}
         while True:
             s = snapshot()
             for e in diff(prev, s):
@@ -1548,6 +1551,13 @@ def qt_app(mode):
                 inner.addRect(QRectF(-18, 4.6, 36, 1.8))
             elif kind in ("barrel", "barrel_led", "barrel_dot"):  # круглый разъём питания (с лампочкой сбоку/точкой)
                 path.addEllipse(QPointF(0, 0), 8, 8); inner.addEllipse(QPointF(0, 0), 2.6, 2.6)
+            elif kind == "led":  # индикатор на корпусе (питание / зарядка)
+                if busy:
+                    g3 = QRadialGradient(QPointF(0, 0), 13); c3 = QColor(RED); c3.setAlpha(170); g3.setColorAt(0, c3)
+                    c3.setAlpha(0); g3.setColorAt(1, c3); q.setPen(Qt.NoPen); q.setBrush(QBrush(g3)); q.drawEllipse(QPointF(0, 0), 13, 13)
+                q.setPen(QPen(PORT_EDGE, 1)); q.setBrush(QColor("#e8f4ff") if busy else LED_OFF); q.drawEllipse(QPointF(0, 0), 2.6, 2.6)
+                q.restore()
+                return
             elif kind == "sdslot":  # тонкий слот карты памяти
                 path.addRoundedRect(QRectF(-16, -2.5, 32, 5), 2, 2); inner.addRect(QRectF(-12, -0.8, 24, 1.6))
             elif kind == "sidedock":  # длинный боковой разъём дока (HP) — вытянут вдоль боковины
