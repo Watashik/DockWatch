@@ -124,13 +124,6 @@ TR = {
     "headset": {"uk": "🎧 гарнітура (з мікрофоном)", "ru": "🎧 гарнитура (с микрофоном)", "en": "🎧 headset (with mic)"},
     "sd_card": {"uk": "💾 картка {size}", "ru": "💾 карта {size}", "en": "💾 card {size}"},
     "off": {"uk": "вимкнено", "ru": "выключен", "en": "off"},
-    "fnlock": {"uk": "Fn Lock", "ru": "Fn Lock", "en": "Fn Lock"},
-    "fnlock_hint": {"uk": "Стан Fn Lock ThinkPad не повідомляє системі. Щоб стежити за ним, потрібен доступ до клавіатури:\n"
-                          "sudo usermod -aG input $USER  і перезайти. Програма бачить лише Fn+Esc і верхній ряд, нічого не записує.",
-                    "ru": "Состояние Fn Lock ThinkPad системе не сообщает. Чтобы следить за ним, нужен доступ к клавиатуре:\n"
-                          "sudo usermod -aG input $USER  и перезайти. Программа смотрит только Fn+Esc и верхний ряд, ничего не записывает.",
-                    "en": "ThinkPad doesn't report Fn Lock to the OS. To track it, keyboard access is needed:\n"
-                          "sudo usermod -aG input $USER and log in again. Only Fn+Esc and the top row are watched, nothing is stored."},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
@@ -563,62 +556,6 @@ def sd_cards():
         item = tr("sd_card", size=human(size)) + (f" · «{label}»" if label else "") + (f" · {mnt}" if mnt else "")
         out.append((item, f"↓{human(r_)}{tr('per_s')} ↑{human(w_)}{tr('per_s')}"))
     return out
-
-
-# Fn Lock на ThinkPad живёт в прошивке и в /sys не виден. Выводим его по клавишам:
-# Fn+Esc (KEY_FN_ESC) переключает; F1..F12 от верхнего ряда = Fn Lock включён, мультимедиа-коды = выключен.
-KEY_FN_ESC = 0x1D1
-F_KEYS = set(range(59, 69)) | {87, 88}
-MEDIA_KEYS = {113, 114, 115, 248, 224, 225, 227, 228, 240, 0x1D2}  # mute, vol-, vol+, micmute, яркость, …
-FNLOCK = {"state": None, "access": None}
-
-
-def fnlock_watch(on_change=None):
-    """Фоновый поток: читает клавиатуры ThinkPad из /dev/input (нужна группа input). Только коды верхнего ряда."""
-    import struct
-    import select
-    import threading
-    devs = []
-    for d in glob.glob("/sys/class/input/event*/device/name"):
-        n = rd(d)
-        if n in ("AT Translated Set 2 keyboard", "ThinkPad Extra Buttons"):
-            devs.append("/dev/input/" + d.split("/")[4])
-    fds = []
-    for d in devs:
-        try:
-            fds.append(open(d, "rb", buffering=0))
-        except OSError:
-            pass
-    FNLOCK["access"] = bool(fds)
-    if not fds:
-        return
-    fmt = "llHHi"
-    size = struct.calcsize(fmt)
-
-    def loop():
-        while True:
-            for f in select.select(fds, [], [])[0]:
-                data = f.read(size * 16)
-                for i in range(0, len(data) - size + 1, size):
-                    _, _, typ, code, val = struct.unpack(fmt, data[i:i + size])
-                    if typ != 1 or val != 1:
-                        continue
-                    old = FNLOCK["state"]
-                    if code == KEY_FN_ESC:
-                        FNLOCK["state"] = (not old) if old is not None else None
-                    elif code in F_KEYS:
-                        FNLOCK["state"] = True
-                    elif code in MEDIA_KEYS:
-                        FNLOCK["state"] = False
-                    if FNLOCK["state"] != old:
-                        try:
-                            cfg = load_config(); cfg["fnlock"] = FNLOCK["state"]; save_config(cfg)
-                        except OSError:
-                            pass
-    cfg = load_config()
-    if FNLOCK["state"] is None and isinstance(cfg.get("fnlock"), bool):
-        FNLOCK["state"] = cfg["fnlock"]
-    threading.Thread(target=loop, daemon=True).start()
 
 
 def sensors():
@@ -1160,16 +1097,13 @@ def qt_app(mode):
             if led is None:
                 q.setFont(font(8)); q.setPen(DIM); q.drawText(QRectF(c.x() - 5, c.y() - 6, 10, 12), Qt.AlignCenter, "?")
 
-        def header_media(self, q, x0, x1, cy):
-            """Камера, микрофоны и клавиши Esc(Fn Lock)/F1/F4 — прямо в шапке, без рамки."""
+        def header_media(self, q, kx, cx, cy, maxw):
+            """F1/F4 со светодиодами после логотипа; микрофоны и камера — по центру шапки, строка состояния под ними."""
             m = self.s.get("media") or {}
-            self.fn_rect = QRectF(x0, cy - 17, 62, 34)
-            self.key(q, self.fn_rect, "Esc", "FnLock", FNLOCK["state"])
-            self.key(q, QRectF(x0 + 70, cy - 17, 54, 34), "🔇", "F1", bool(m.get("spk_muted")))
-            self.key(q, QRectF(x0 + 132, cy - 17, 54, 34), "🎙", "F4", bool(m.get("mic_muted")))
-            mx = x0 + 260
+            self.key(q, QRectF(kx, cy - 17, 54, 34), "🔇", "F1", bool(m.get("spk_muted")))
+            self.key(q, QRectF(kx + 62, cy - 17, 54, 34), "🎙", "F4", bool(m.get("mic_muted")))
             live = bool(m.get("mic_users")) and not m.get("mic_muted")
-            for x in (mx - 48, mx + 48):
+            for x in (cx - 56, cx + 56):
                 if live:
                     g = QRadialGradient(QPointF(x, cy), 13); cg = QColor(RED); cg.setAlpha(150); g.setColorAt(0, cg)
                     cg.setAlpha(0); g.setColorAt(1, cg); q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawEllipse(QPointF(x, cy), 13, 13)
@@ -1177,27 +1111,25 @@ def qt_app(mode):
                 if m.get("mic_muted"):
                     q.setPen(QPen(QColor("#8a8a8d"), 1.3)); q.drawLine(QPointF(x - 6, cy + 6), QPointF(x + 6, cy - 6))
             cam_on = bool(m.get("cam_users"))
-            q.setPen(QPen(QColor("#2a2a2c"), 2)); q.setBrush(QColor("#0b0b0c")); q.drawEllipse(QPointF(mx, cy), 13, 13)
-            q.setBrush(QColor("#151517")); q.drawEllipse(QPointF(mx, cy), 8, 8)
-            q.setPen(Qt.NoPen); q.setBrush(RED if m.get("cam_present") else QColor("#333")); q.drawEllipse(QPointF(mx, cy), 2.6, 2.6)
-            lx = mx + 24
+            q.setPen(QPen(QColor("#2a2a2c"), 2)); q.setBrush(QColor("#0b0b0c")); q.drawEllipse(QPointF(cx, cy), 13, 13)
+            q.setBrush(QColor("#151517")); q.drawEllipse(QPointF(cx, cy), 8, 8)
+            q.setPen(Qt.NoPen); q.setBrush(RED if m.get("cam_present") else QColor("#333")); q.drawEllipse(QPointF(cx, cy), 2.6, 2.6)
+            lx = cx + 26
             if cam_on:
                 g = QRadialGradient(QPointF(lx, cy), 12); cg = QColor("#ffffff"); cg.setAlpha(170); g.setColorAt(0, cg)
                 cg.setAlpha(0); g.setColorAt(1, cg); q.setBrush(QBrush(g)); q.drawEllipse(QPointF(lx, cy), 12, 12)
             q.setBrush(QColor("#fafafa") if cam_on else QColor("#3a3a3c")); q.drawEllipse(QPointF(lx, cy), 2.4, 2.4)
             if not m:
                 return
-            mic, cam, spk = media_lines(m)
-            tx = mx + 72
-            w = x1 - tx
-            if w < 60:
-                return
-            fm, fs = QFontMetricsF(font(11)), QFontMetricsF(font(10))
-            for i, (t, hot) in enumerate(((mic, live), (cam, cam_on))):
-                q.setFont(font(11, bold=hot)); q.setPen(RED if hot else TXT)
-                q.drawText(QPointF(tx, cy - 6 + i * 15), fm.elidedText(t, Qt.ElideRight, w))
-            q.setFont(font(10)); q.setPen(DIM)
-            q.drawText(QPointF(tx, cy + 24), fs.elidedText(spk, Qt.ElideRight, w))
+            mic = tr("muted") if m["mic_muted"] else (tr("recording", x=", ".join(dict.fromkeys(m["mic_users"]))) if m["mic_users"]
+                                                      else f"{m['mic_vol']}%" if m["mic_vol"] is not None else tr("on"))
+            cam = tr("cam_none") if not m["cam_present"] else (", ".join(m["cam_users"]) if m["cam_users"] else tr("cam_free"))
+            spk = tr("muted") if m["spk_muted"] else (f"{m['spk_vol']}%" if m["spk_vol"] is not None else tr("on"))
+            line = f"🎙 {mic}     📷 {cam}     🔊 {spk}"
+            f = font(11, bold=live or cam_on)
+            q.setFont(f); q.setPen(RED if live or cam_on else DIM)
+            q.drawText(QRectF(cx - maxw / 2, cy + 20, maxw, 16), Qt.AlignCenter,
+                       QFontMetricsF(f).elidedText(line, Qt.ElideRight, maxw))
 
         def paintEvent(self, ev):
             q = QPainter(self)
@@ -1226,7 +1158,8 @@ def qt_app(mode):
                 q.setFont(font(12, italic=True))
                 q.drawText(QRectF(W - 284, 46, 260, 20), Qt.AlignRight, txt)
             if any(g.get("bezel") for g in self.s["groups"]):
-                self.header_media(q, max(x_after + 28, 190), W - 290, 44)
+                left = max(x_after + 28, 190)
+                self.header_media(q, left, W / 2, 38, min(W - 2 * (left + 130), 2 * (W - 300 - W / 2)))
             # bodies, row by row
             self.rects = {}
             y = 92
@@ -1309,11 +1242,6 @@ def qt_app(mode):
 
         def mouseMoveEvent(self, e):
             pos = e.position() / self.scale
-            if getattr(self, "fn_rect", None) is not None and self.fn_rect.contains(pos):
-                st = FNLOCK["state"]
-                self.setToolTip(f"<b>Fn Lock</b>: {tr('on') if st else tr('off') if st is False else '?'}"
-                                + ("" if FNLOCK["access"] else "<br>" + tr("fnlock_hint").replace(chr(10), "<br>")))
-                return
             hit = next((k for k, r in self.rects.items() if r.contains(pos)), None)
             if hit:
                 pt = self.s["ports"][hit]
@@ -1354,7 +1282,6 @@ def qt_app(mode):
             probe.disconnectFromServer()
             return
         QLocalServer.removeServer(sock_name)
-    fnlock_watch()
     view = DockView()
     state = {"prev": view.s}
     tray = None
