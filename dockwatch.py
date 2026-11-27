@@ -838,6 +838,10 @@ def qt_app(mode):
     app.setQuitOnLastWindowClosed(not tray_mode)
     app.setApplicationName("dockwatch")
     app.setDesktopFileName("dockwatch")
+    icon = QIcon.fromTheme("dockwatch")
+    if icon.isNull():
+        icon = QIcon(os.path.join(HERE, "data", "dockwatch.svg"))
+    app.setWindowIcon(icon)
     # одна копия: повторный запуск (иконка, команда в терминале) просто показывает окно уже запущенной
     sock_name = f"dockwatch-{os.getuid()}"
     if tray_mode and not os.environ.get("DOCKWATCH_SCREENSHOT"):

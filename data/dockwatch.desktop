@@ -10,6 +10,6 @@ Comment[ru]=Живая схема портов док-станции и ноут
 Exec=dockwatch
 Icon=dockwatch
 Terminal=false
-Categories=System;Monitor;Utility;
+Categories=System;Monitor;
 Keywords=dock;usb;ports;thinkpad;
 StartupWMClass=dockwatch
