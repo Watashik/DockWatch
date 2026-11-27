@@ -2054,6 +2054,8 @@ def qt_app(mode):
             self.plug_anim = False
             self.top_hover = False
             self.ev_hover = False
+            self.dev_hover = False
+            self.devwin = None
             self.cal = None      # калибровка в окне: {"queue": [pid…], "i": n, "before": {usb names}, "bound": n}
             self.gear_hover = False
             self.drag = None
@@ -2082,6 +2084,7 @@ def qt_app(mode):
                 self.log.insert(0, time.strftime("%H:%M:%S  ") + e)
             self.log = self.log[:300]
             self.refresh_events()
+            self.refresh_devices()
             self.blink ^= 1
             self.update()
 
@@ -2195,19 +2198,41 @@ def qt_app(mode):
 
         def show_events(self):
             """Отдельное окно со всеми событиями сессии (новые сверху)."""
-            from PySide6.QtWidgets import QPlainTextEdit
             if self.evwin is None:
-                self.evwin = QDialog(self); self.evwin.setWindowTitle("DockWatch · " + tr("events"))
-                self.evwin.resize(620, 420)
-                lay = QVBoxLayout(self.evwin)
-                self.evtext = QPlainTextEdit(); self.evtext.setReadOnly(True)
-                self.evtext.setStyleSheet(f"QPlainTextEdit {{ background: {BGC.name()}; color: {TXT.name()}; border: 1px solid {EDGE.name()};"
-                                          f" font-size: 13px; }}")
-                lay.addWidget(self.evtext)
+                self.evwin, self.evtext = self.popup(tr("events"))
+            self.evwin.show(); self.evwin.raise_(); self.evwin.activateWindow()
             self.log_seen = len(self.log)
             self.refresh_events()
-            self.evwin.show(); self.evwin.raise_(); self.evwin.activateWindow()
             self.update()
+
+        def popup(self, title):
+            from PySide6.QtWidgets import QPlainTextEdit
+            w = QDialog(self); w.setWindowTitle("DockWatch · " + title)
+            w.resize(900, 620)
+            lay = QVBoxLayout(w)
+            t = QPlainTextEdit(); t.setReadOnly(True)
+            t.setStyleSheet(f"QPlainTextEdit {{ background: {BGC.name()}; color: {TXT.name()}; border: 1px solid {EDGE.name()};"
+                            f" font-size: 15px; padding: 8px; }}")
+            lay.addWidget(t)
+            return w, t
+
+        def show_devices(self):
+            if self.devwin is None:
+                self.devwin, self.devtext = self.popup(tr("connected"))
+            self.devwin.show(); self.devwin.raise_(); self.devwin.activateWindow()
+            self.refresh_devices()  # после show: обновляется только видимое окно
+
+        def refresh_devices(self):
+            if self.devwin is None or not self.devwin.isVisible():
+                return
+            lines = []
+            for pt in self.s["ports"].values():
+                for it, st in zip(pt["items"], pt["stats"]):
+                    lines.append(f"●  {pt['label']}    {it}" + (f"\n        {st}" if st else ""))
+            lines += [f"?  {it}" + (f"\n        {st}" if st else "") for it, st in zip(self.s["loose"], self.s["loose_stats"])]
+            text = "\n".join(lines) or tr("nothing")
+            if text != self.devtext.toPlainText():
+                self.devtext.setPlainText(text)
 
         def refresh_events(self):
             if self.evwin is not None and self.evwin.isVisible():
@@ -2634,7 +2659,7 @@ def qt_app(mode):
             kz = min(1.45, max(1.0, W / BASE_W))
             if self.topview:
                 # вид сверху ужимается по высоте, чтобы под ним поместились списки и не залезть на подвал
-                y = self.top_view(q, y, W, max(0.55, min(kz, (H - y - 230) / 460)))
+                y = self.top_view(q, y, W, max(0.6, min(1.5, (H - y - 96) / 470)))
             for row in ([] if self.topview else rows_of([g for g in self.s["groups"] if not g.get("bezel")])):
                 h = 26 + 32 * kz
                 tower_w = 84 * (1 + (kz - 1) * 0.5) if any(g.get("tower") for g in row) else 0
@@ -2694,42 +2719,52 @@ def qt_app(mode):
                 q.drawText(QRectF(24, H - 66, W - 110, 18), Qt.AlignLeft,
                            tr("cal_banner", i=self.cal["i"] + 1, n=len(self.cal["queue"]), p=lab))
             # connected / events — в той же центральной колонке, что и схема
-            q.save(); q.translate(off, 0); W_full, W = W, CW
-            q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(28, y + 6), tr("connected"))
-            q.setFont(font(13))
-            yy = y + 28
-            rows = [(pt["label"], it, st, accent(pt["kind"])) for pt in self.s["ports"].values() for it, st in zip(pt["items"], pt["stats"])]
-            pid_of = {(pt["label"], pt["items"][0]): pt["id"] for pt in self.s["ports"].values() if pt["items"]}
-            rows += [("?", it, st, QColor("#c9a227")) for it, st in zip(self.s["loose"], self.s["loose_stats"])]
-            if self.s.get("dock_hidden"):
-                rows.append(("—", tr("dock_hidden"), "", DIM))
-            if not rows:
-                q.setPen(DIM); q.drawText(QPointF(40, yy), tr("nothing")); yy += 20
-            colw = W - 150 - 40  # события — в отдельном окне, список на всю ширину
-            for lab, it, st, col in rows:
-                if yy > H - 100 - (16 if st else 0):  # не заезжать на подвал и кнопки
-                    break
-                q.setPen(Qt.NoPen); q.setBrush(col); q.drawEllipse(QPointF(36, yy - 4), 3.5, 3.5)
-                q.setFont(font(13)); q.setPen(col); q.drawText(QPointF(48, yy), lab)
-                fm = QFontMetricsF(font(13))
-                q.setPen(TXT); q.drawText(QPointF(140, yy), fm.elidedText(it, Qt.ElideRight, colw))
-                if st:  # потребление/нагрузка — отдельной строкой под устройством
-                    yy += 16
-                    q.setFont(font(11)); q.setPen(STATC)
-                    fm11 = QFontMetricsF(font(11))
-                    st_e = fm11.elidedText(st, Qt.ElideRight, colw - 90)
-                    q.drawText(QPointF(150, yy), st_e)
-                    hist = self.hist.get(pid_of.get((lab, it)))
-                    if hist and max(hist) > 0:  # мини-график скорости за последнюю минуту
-                        gx, gw_, gh = 158 + fm11.horizontalAdvance(st_e), 70, 12
-                        mx_ = max(hist)
-                        path = QPainterPath()
-                        for i, v in enumerate(hist):
-                            px_, py_ = gx + gw_ * i / max(1, len(hist) - 1), yy - gh * v / mx_
-                            path.lineTo(px_, py_) if i else path.moveTo(px_, py_)
-                        q.setPen(QPen(QColor("#d0464c"), 1.2)); q.setBrush(Qt.NoBrush); q.drawPath(path)
-                yy += 21
-            q.restore(); W = W_full
+            if not self.topview:  # в виде сверху списки — во всплывающих окнах
+                q.save(); q.translate(off, 0); W_full, W = W, CW
+                q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(28, y + 6), tr("connected"))
+                q.setFont(font(13))
+                yy = y + 28
+                rows = [(pt["label"], it, st, accent(pt["kind"])) for pt in self.s["ports"].values() for it, st in zip(pt["items"], pt["stats"])]
+                pid_of = {(pt["label"], pt["items"][0]): pt["id"] for pt in self.s["ports"].values() if pt["items"]}
+                rows += [("?", it, st, QColor("#c9a227")) for it, st in zip(self.s["loose"], self.s["loose_stats"])]
+                if self.s.get("dock_hidden"):
+                    rows.append(("—", tr("dock_hidden"), "", DIM))
+                if not rows:
+                    q.setPen(DIM); q.drawText(QPointF(40, yy), tr("nothing")); yy += 20
+                ex = W * 0.60
+                colw = ex - 150 - 20  # текст списка не должен залезать на колонку «События»
+                for lab, it, st, col in rows:
+                    if yy > H - 100 - (16 if st else 0):  # не заезжать на подвал и кнопки
+                        break
+                    q.setPen(Qt.NoPen); q.setBrush(col); q.drawEllipse(QPointF(36, yy - 4), 3.5, 3.5)
+                    q.setFont(font(13)); q.setPen(col); q.drawText(QPointF(48, yy), lab)
+                    fm = QFontMetricsF(font(13))
+                    q.setPen(TXT); q.drawText(QPointF(140, yy), fm.elidedText(it, Qt.ElideRight, colw))
+                    if st:  # потребление/нагрузка — отдельной строкой под устройством
+                        yy += 16
+                        q.setFont(font(11)); q.setPen(STATC)
+                        fm11 = QFontMetricsF(font(11))
+                        st_e = fm11.elidedText(st, Qt.ElideRight, colw - 90)
+                        q.drawText(QPointF(150, yy), st_e)
+                        hist = self.hist.get(pid_of.get((lab, it)))
+                        if hist and max(hist) > 0:  # мини-график скорости за последнюю минуту
+                            gx, gw_, gh = 158 + fm11.horizontalAdvance(st_e), 70, 12
+                            mx_ = max(hist)
+                            path = QPainterPath()
+                            for i, v in enumerate(hist):
+                                px_, py_ = gx + gw_ * i / max(1, len(hist) - 1), yy - gh * v / mx_
+                                path.lineTo(px_, py_) if i else path.moveTo(px_, py_)
+                            q.setPen(QPen(QColor("#d0464c"), 1.2)); q.setBrush(Qt.NoBrush); q.drawPath(path)
+                    yy += 21
+                q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(ex, y + 6), tr("events"))
+                q.setFont(font(12)); q.setPen(DIM)
+                efm = QFontMetricsF(font(12))
+                for i, e in enumerate(self.log[:12] or [tr("quiet")]):
+                    if y + 28 + i * 19 > H - 100:
+                        break
+                    q.drawText(QPointF(ex + 8, y + 28 + i * 19), efm.elidedText(e, Qt.ElideRight, W - ex - 32))
+                self.log_seen = len(self.log)  # в обычном виде события и так на экране
+                q.restore(); W = W_full
             # footer like the wallpaper: IBM — red line — Technologies and Design
             fy = H - 24
             is_tp = (self.s.get("laptop") or {}).get("brand", "ThinkPad") == "ThinkPad" if self.s.get("laptop") else True
@@ -2762,18 +2797,33 @@ def qt_app(mode):
             q.drawRect(QRectF(ic.left() + 3, ic.top() + 3, ic.width() - 6, ic.height() * 0.4))
             q.drawRect(QRectF(ic.center().x() - 3, ic.bottom() - 6, 6, 4))
             # кнопка «События»: значок — список, красная метка с числом новых
-            self.evbtn = QRectF(W - 142, fy - 60, 34, 34)
-            q.setPen(QPen(RED if fl == "ev" else EDGE, 1.2)); q.setBrush(KEYC.darker(140) if fl == "ev" else KEYC)
-            q.drawRoundedRect(self.evbtn.translated(0, 1) if fl == "ev" else self.evbtn, 7, 7)
-            q.setPen(QPen(TXT if self.ev_hover else DIM, 1.6, Qt.SolidLine, Qt.RoundCap))
-            for i in range(3):
-                yl = self.evbtn.top() + 11 + i * 6
-                q.drawPoint(QPointF(self.evbtn.left() + 10, yl)); q.drawLine(QPointF(self.evbtn.left() + 14, yl), QPointF(self.evbtn.right() - 9, yl))
-            new_ = len(self.log) - self.log_seen
-            if new_ > 0:
-                q.setPen(Qt.NoPen); q.setBrush(RED); q.drawEllipse(QPointF(self.evbtn.right() - 3, self.evbtn.top() + 3), 8, 8)
-                q.setFont(font(9, bold=True)); q.setPen(QColor("white"))
-                q.drawText(QRectF(self.evbtn.right() - 11, self.evbtn.top() - 5, 16, 16), Qt.AlignCenter, str(min(new_, 99)))
+            self.evbtn = QRectF(W - 142, fy - 60, 34, 34) if self.topview else None
+            self.devbtn = QRectF(W - 184, fy - 60, 34, 34) if self.topview else None
+            if self.topview:  # в виде сверху: кнопки «Подключено» и «События»
+                q.setPen(QPen(RED if fl == "ev" else EDGE, 1.2)); q.setBrush(KEYC.darker(140) if fl == "ev" else KEYC)
+                q.drawRoundedRect(self.evbtn.translated(0, 1) if fl == "ev" else self.evbtn, 7, 7)
+                q.setPen(QPen(TXT if self.ev_hover else DIM, 1.6, Qt.SolidLine, Qt.RoundCap))
+                for i in range(3):
+                    yl = self.evbtn.top() + 11 + i * 6
+                    q.drawPoint(QPointF(self.evbtn.left() + 10, yl)); q.drawLine(QPointF(self.evbtn.left() + 14, yl), QPointF(self.evbtn.right() - 9, yl))
+                new_ = len(self.log) - self.log_seen
+                if new_ > 0:
+                    q.setPen(Qt.NoPen); q.setBrush(RED); q.drawEllipse(QPointF(self.evbtn.right() - 3, self.evbtn.top() + 3), 8, 8)
+                    q.setFont(font(9, bold=True)); q.setPen(QColor("white"))
+                    q.drawText(QRectF(self.evbtn.right() - 11, self.evbtn.top() - 5, 16, 16), Qt.AlignCenter, str(min(new_, 99)))
+                # «Подключено»: значок — штекер, число занятых портов
+                q.setPen(QPen(RED if fl == "dev" else EDGE, 1.2)); q.setBrush(KEYC.darker(140) if fl == "dev" else KEYC)
+                q.drawRoundedRect(self.devbtn.translated(0, 1) if fl == "dev" else self.devbtn, 7, 7)
+                q.setPen(QPen(TXT if self.dev_hover else DIM, 1.5, Qt.SolidLine, Qt.RoundCap)); q.setBrush(Qt.NoBrush)
+                b_ = self.devbtn
+                q.drawRoundedRect(QRectF(b_.center().x() - 5, b_.top() + 12, 10, 9), 2, 2)
+                q.drawLine(QPointF(b_.center().x() - 2.5, b_.top() + 8), QPointF(b_.center().x() - 2.5, b_.top() + 12))
+                q.drawLine(QPointF(b_.center().x() + 2.5, b_.top() + 8), QPointF(b_.center().x() + 2.5, b_.top() + 12))
+                q.drawLine(QPointF(b_.center().x(), b_.top() + 21), QPointF(b_.center().x(), b_.bottom() - 7))
+                if self.s["busy"]:
+                    q.setPen(Qt.NoPen); q.setBrush(LED_ON.darker(130)); q.drawEllipse(QPointF(b_.right() - 3, b_.top() + 3), 8, 8)
+                    q.setFont(font(9, bold=True)); q.setPen(BGC)
+                    q.drawText(QRectF(b_.right() - 11, b_.top() - 5, 16, 16), Qt.AlignCenter, str(self.s["busy"]))
             o = self.s.get("os") or {}
             if o:  # система: логотип дистрибутива + название, ядро, рабочий стол
                 if not hasattr(self, "os_icon"):
@@ -2915,6 +2965,10 @@ def qt_app(mode):
                 self.flash = ("gear", time.monotonic()); self.repaint()
                 settings()
                 return
+            if e.button() == Qt.LeftButton and getattr(self, "devbtn", None) is not None and self.devbtn.contains(pos):
+                self.flash = ("dev", time.monotonic())
+                self.show_devices()
+                return
             if e.button() == Qt.LeftButton and getattr(self, "evbtn", None) is not None and self.evbtn.contains(pos):
                 self.flash = ("ev", time.monotonic())
                 self.show_events()
@@ -2957,12 +3011,14 @@ def qt_app(mode):
             hov = getattr(self, "gear", None) is not None and self.gear.contains(pos)
             thov = getattr(self, "topbtn", None) is not None and self.topbtn.contains(pos)
             ehov = getattr(self, "evbtn", None) is not None and self.evbtn.contains(pos)
-            if (hov, thov, ehov) != (self.gear_hover, self.top_hover, self.ev_hover):
-                self.gear_hover, self.top_hover, self.ev_hover = hov, thov, ehov
-                self.setCursor(Qt.PointingHandCursor if (hov or thov or ehov) else Qt.ArrowCursor)
+            dhov = getattr(self, "devbtn", None) is not None and self.devbtn.contains(pos)
+            if (hov, thov, ehov, dhov) != (self.gear_hover, self.top_hover, self.ev_hover, self.dev_hover):
+                self.gear_hover, self.top_hover, self.ev_hover, self.dev_hover = hov, thov, ehov, dhov
+                self.setCursor(Qt.PointingHandCursor if (hov or thov or ehov or dhov) else Qt.ArrowCursor)
                 self.update()
-            if hov or thov or ehov:
-                self.setToolTip(tr("m_settings").rstrip("…") if hov else tr("top_view") if thov else tr("events"))
+            if hov or thov or ehov or dhov:
+                self.setToolTip(tr("m_settings").rstrip("…") if hov else tr("top_view") if thov else
+                                tr("events") if ehov else tr("connected"))
                 return
             if self.editing and getattr(self, "drag", None):
                 pt = self.s["ports"][self.drag]
