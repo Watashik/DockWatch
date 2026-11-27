@@ -98,6 +98,9 @@ TR = {
     "not_found": {"uk": "не визначено", "ru": "не определено", "en": "not detected"},
     "no_dock": {"uk": "Без дока", "ru": "Без дока", "en": "No dock"},
     "per_s": {"uk": "/с", "ru": "/с", "en": "/s"},
+    "pd_source": {"uk": "🔌 віддає живлення · {mode} · до {a} A", "ru": "🔌 отдаёт питание · {mode} · до {a} A",
+                  "en": "🔌 supplying power · {mode} · up to {a} A"},
+    "pd_sink": {"uk": "🔌 заряджається · {mode} · {w}", "ru": "🔌 заряжается · {mode} · {w}", "en": "🔌 charging · {mode} · {w}"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
@@ -400,6 +403,23 @@ def typec_power():
     return out
 
 
+def typec_info(port):
+    """Состояние USB-C порта (typec + ucsi): кто кому даёт питание и сколько. port — "port1"."""
+    base = f"/sys/class/typec/{port}"
+    if not os.path.exists(f"{base}-partner"):
+        return ""
+    role = re.search(r"\[(\w+)\]", rd(f"{base}/power_role"))
+    mode = rd(f"{base}/power_operation_mode").replace("usb_power_delivery", "USB PD").replace("_", " ")
+    n = int(re.sub(r"\D", "", port) or 0) + 1
+    psy = next(iter(glob.glob(f"/sys/class/power_supply/ucsi-*USBC000:{n:03d}")), "")
+    cur = int(rd(f"{psy}/current_now", "0") or 0) if psy else 0
+    volt = int(rd(f"{psy}/voltage_now", "0") or 0) if psy else 0
+    if role and role.group(1) == "source":
+        return tr("pd_source", mode=mode or "USB-C", a=f"{cur / 1e6:.1f}" if cur else "?")
+    w = f"{volt * cur / 1e12:.0f} W" if volt and cur else ""
+    return tr("pd_sink", mode=mode or "USB-C", w=w).rstrip(" ·")
+
+
 def human(n):
     for u in ("B", "KB", "MB", "GB", "TB"):
         if n < 1024:
@@ -477,6 +497,14 @@ def snapshot(cfg=None):
             put(pid, item, stat)
         else:
             loose.append(item); loose_stats.append(stat if show else "")
+    for pid, p in ports.items():  # USB-C: питание по Power Delivery
+        if p.get("typec"):
+            info = typec_info(p["typec"])
+            if info and show:
+                if p["items"]:
+                    p["stats"][0] = " · ".join(x for x in (p["stats"][0], info) if x)
+                else:
+                    put(pid, info.split(" · ")[0], info)
     if docked and by_role("dock", "laptop"):
         put(by_role("dock", "laptop"), tr("in_dock"))
     busy = sum(p["busy"] for p in ports.values())
