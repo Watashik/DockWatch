@@ -90,6 +90,15 @@ TR = {
                  "en": "  currently connected: {c}. Which connector is it? "},
     "cal_saved": {"uk": "\nЗбережено: {f}", "ru": "\nСохранено: {f}", "en": "\nSaved: {f}"},
     "nothing_short": {"uk": "нічого", "ru": "ничего", "en": "nothing"},
+    "m_stats": {"uk": "Показувати споживання й навантаження", "ru": "Показывать потребление и нагрузку", "en": "Show power & load"},
+    "m_hidedock": {"uk": "Ховати док, коли він неактивний", "ru": "Скрывать док, когда он неактивен", "en": "Hide the dock when inactive"},
+    "m_laptop": {"uk": "Ноутбук", "ru": "Ноутбук", "en": "Laptop"},
+    "m_dock": {"uk": "Док-станція", "ru": "Док-станция", "en": "Docking station"},
+    "auto": {"uk": "Авто ({x})", "ru": "Авто ({x})", "en": "Auto ({x})"},
+    "not_found": {"uk": "не визначено", "ru": "не определено", "en": "not detected"},
+    "no_dock": {"uk": "Без дока", "ru": "Без дока", "en": "No dock"},
+    "per_s": {"uk": "/с", "ru": "/с", "en": "/s"},
+    "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
 
@@ -140,8 +149,11 @@ def load_config():
     cfg.setdefault("labels", {})   # custom connector names
     cfg.setdefault("eth", "")
     cfg.setdefault("lang", "")
-    cfg.setdefault("dock", "")     # dock profile id (remembered when detected)
-    cfg.setdefault("laptop", "")   # laptop profile id (otherwise by DMI)
+    cfg.setdefault("dock", "")             # last detected dock profile id
+    cfg.setdefault("dock_choice", "auto")  # auto | <profile id> | none
+    cfg.setdefault("laptop_choice", cfg.pop("laptop", "") or "auto")  # auto | <profile id>
+    cfg.setdefault("show_stats", True)
+    cfg.setdefault("hide_dock", False)
     return cfg
 
 
@@ -178,25 +190,31 @@ def usb_devices():
     return devs
 
 
-def select_profiles(cfg, devs):
-    docks, laptops = load_profiles("docks"), load_profiles("laptops")
+def detect_profiles(cfg, devs):
+    """Автоопределение: док — по VID:PID его хабов, ноутбук — по DMI. Возвращает (док, ноутбук) или None."""
     ids = {f"{d['vid']}:{d['pid']}" for d in devs.values()}
-    dock = None
-    for p in docks:
-        if any(f"{v}:{pid}" in ids for v, pid in p.get("match", {}).get("usb_hubs", [])):
-            dock = p
-            if cfg.get("dock") != p["id"]:
-                cfg["dock"] = p["id"]
-                try:
-                    save_config(cfg)
-                except OSError:
-                    pass
-            break
-    if dock is None:
-        dock = next((p for p in docks if p["id"] == cfg.get("dock")), None)
-    dmi = " ".join(rd(f"/sys/class/dmi/id/{k}") for k in ("product_version", "product_name", "product_family"))
-    laptop = next((p for p in laptops if p["id"] == cfg.get("laptop")), None) or \
-        next((p for p in laptops if any(m.lower() in dmi.lower() for m in p.get("match", {}).get("dmi", []))), None)
+    dock = next((p for p in load_profiles("docks")
+                 if any(f"{v}:{pid}" in ids for v, pid in p.get("match", {}).get("usb_hubs", []))), None)
+    if dock and cfg.get("dock") != dock["id"]:
+        cfg["dock"] = dock["id"]  # запоминаем: без питания док не виден, но схема должна остаться
+        try:
+            save_config(cfg)
+        except OSError:
+            pass
+    dmi = " ".join(rd(f"/sys/class/dmi/id/{k}") for k in ("product_version", "product_name", "product_family")).lower()
+    laptop = next((p for p in load_profiles("laptops")
+                   if any(m.lower() in dmi for m in p.get("match", {}).get("dmi", []))), None)
+    return dock, laptop
+
+
+def select_profiles(cfg, devs):
+    det_dock, det_laptop = detect_profiles(cfg, devs)
+    docks = {p["id"]: p for p in load_profiles("docks")}
+    laptops = {p["id"]: p for p in load_profiles("laptops")}
+    dc = cfg.get("dock_choice", "auto")
+    dock = None if dc == "none" else docks.get(dc) if dc != "auto" else (det_dock or docks.get(cfg.get("dock")))
+    lc = cfg.get("laptop_choice", "auto")
+    laptop = laptops.get(lc) if lc != "auto" else det_laptop
     return dock, laptop
 
 
@@ -326,6 +344,62 @@ def docked_flag():
     return None
 
 
+_PREV = {}
+
+
+def rate(key, value):
+    """Скорость изменения счётчика (в секунду) между вызовами."""
+    t = time.monotonic()
+    old = _PREV.get(key)
+    _PREV[key] = (t, value)
+    if not old or t <= old[0] or value < old[1]:
+        return 0.0
+    return (value - old[1]) / (t - old[0])
+
+
+def in_usb_path(path, name):
+    return f"/{name}/" in path or path.endswith(f"/{name}")
+
+
+def usb_stats(name):
+    """Что можно узнать о нагрузке USB-устройства без root: заявленный ток, диск (чтение/запись), сеть."""
+    p = f"/sys/bus/usb/devices/{name}"
+    out = []
+    mp = rd(f"{p}/bMaxPower")
+    if mp and mp not in ("0mA", "0"):
+        out.append("⚡ " + mp.replace("mA", " mA"))
+    rx = tx = 0.0
+    disk = False
+    for b in glob.glob("/sys/block/sd*"):
+        if in_usb_path(os.path.realpath(b), name):
+            f = rd(f"{b}/stat").split()
+            if len(f) > 6:
+                disk = True
+                rx += rate(f"blk-r-{b}", int(f[2]) * 512)
+                tx += rate(f"blk-w-{b}", int(f[6]) * 512)
+    if disk:
+        out.append(f"💾 ↓{human(rx)}{tr('per_s')} ↑{human(tx)}{tr('per_s')}")
+    for n in glob.glob("/sys/class/net/*"):
+        dev = os.path.join(n, "device")
+        if os.path.exists(dev) and in_usb_path(os.path.realpath(dev), name):
+            r = rate(f"net-r-{n}", int(rd(f"{n}/statistics/rx_bytes", "0") or 0))
+            w = rate(f"net-w-{n}", int(rd(f"{n}/statistics/tx_bytes", "0") or 0))
+            out.append(f"🌐 ↓{human(r)}{tr('per_s')} ↑{human(w)}{tr('per_s')}")
+    return " · ".join(out)
+
+
+def typec_power():
+    """USB-C Power Delivery (ucsi): какие порты сейчас дают питание и сколько ватт."""
+    out = []
+    for p in sorted(glob.glob("/sys/class/power_supply/ucsi-*")):
+        if rd(f"{p}/online") != "1":
+            continue
+        v, a = rd(f"{p}/voltage_now"), rd(f"{p}/current_now") or rd(f"{p}/current_max")
+        if v and a:
+            out.append(f"USB-C {int(v) / 1e6:.0f} V × {int(a) / 1e6:.1f} A = {int(v) * int(a) / 1e12:.0f} W")
+    return out
+
+
 def human(n):
     for u in ("B", "KB", "MB", "GB", "TB"):
         if n < 1024:
@@ -343,19 +417,22 @@ def snapshot(cfg=None):
     docked = flag if flag is not None else hubs
     eth, pw = ethernet(cfg), power()
     groups, ports = [], {}
+    dock_hidden = bool(dock and cfg.get("hide_dock") and not docked)
     for prof, where in ((dock, "dock"), (laptop, "laptop")):
-        if not prof:
+        if not prof or (where == "dock" and dock_hidden):
             continue
         for g in prof.get("groups", []):
             groups.append(dict(g, owner=where, title=pick(g.get("title", g["id"]))))
         for p in prof.get("ports", []):
             ports[p["id"]] = dict(p, owner=where, label=cfg["labels"].get(p["id"]) or pick(p.get("label", p["id"])),
-                                  busy=False, items=[])
-    loose = []
+                                  busy=False, items=[], stats=[])
+    loose, loose_stats = [], []
+    show = cfg.get("show_stats", True)
 
-    def put(pid, item):
+    def put(pid, item, stat=""):
         ports[pid]["busy"] = True
         ports[pid]["items"].append(item)
+        ports[pid]["stats"].append(stat if show else "")
 
     def by_role(role, owner):
         return next((pid for pid, p in ports.items() if p.get("role") == role and p["owner"] == owner), None)
@@ -364,11 +441,13 @@ def snapshot(cfg=None):
         item = f"{usb_icon(d)} {d['product'] or d['maker'] or d['vid'] + ':' + d['pid']}"
         if speed_text(d["speed"]):
             item += f" · {speed_text(d['speed'])}"
+        stat = usb_stats(d["name"]) if show else ""
         pid = cfg["usb"].get(d["key"])
         if pid in ports:
-            put(pid, item)
+            put(pid, item, stat)
         else:
             loose.append(f"{item}  [{tr('on_dock') if d['dock'] else tr('on_laptop')} · {d['key']}]")
+            loose_stats.append(stat)
     drm_default = {c: pid for pid, p in ports.items() for c in p.get("drm", [])}
     for v in video_outputs().values():
         if not v["connected"]:
@@ -379,20 +458,31 @@ def snapshot(cfg=None):
             put(pid, item)
         else:
             loose.append(f"{item}  [{v['conn']}]")
+            loose_stats.append("")
     owner = "dock" if docked and dock else "laptop"
     if eth["up"]:
         pid = by_role("eth", owner) or by_role("eth", "laptop")
         item = tr("eth_item", s=eth["speed"], rx=human(eth["rx"]), tx=human(eth["tx"]))
-        put(pid, item) if pid else loose.append(item)
+        r, w = rate("eth-r", eth["rx"]), rate("eth-w", eth["tx"])
+        stat = f"↓{human(r)}{tr('per_s')} ↑{human(w)}{tr('per_s')}"
+        if pid:
+            put(pid, item, stat)
+        else:
+            loose.append(item); loose_stats.append(stat if show else "")
     if pw["ac"]:
         pid = by_role("power", owner) or by_role("power", "laptop")
         item = tr("bat_item", p=pw["pct"], st=tr(pw["status"]) if pw["status"] else "", w=pw["watts"])
-        put(pid, item) if pid else loose.append(item)
+        stat = " · ".join([f"{pw['watts']} {tr('W')}"] + typec_power())
+        if pid:
+            put(pid, item, stat)
+        else:
+            loose.append(item); loose_stats.append(stat if show else "")
     if docked and by_role("dock", "laptop"):
         put(by_role("dock", "laptop"), tr("in_dock"))
     busy = sum(p["busy"] for p in ports.values())
-    return {"docked": docked, "groups": groups, "ports": ports, "loose": loose, "busy": busy, "total": len(ports),
-            "power": pw, "dock": dock, "laptop": laptop, "ts": time.time()}
+    return {"docked": docked, "groups": groups, "ports": ports, "loose": loose, "loose_stats": loose_stats,
+            "busy": busy, "total": len(ports), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden,
+            "show_stats": show, "ts": time.time()}
 
 
 def diff(old, new):
@@ -425,7 +515,8 @@ def dump():
         print(g["title"] + ":")
         for p in s["ports"].values():
             if p["g"] == g["id"]:
-                print(f"  {'●' if p['busy'] else '○'} {p['label']:<9} {'; '.join(p['items'])}")
+                det = "; ".join(i + (f"  [{st}]" if st else "") for i, st in zip(p["items"], p["stats"]))
+                print(f"  {'●' if p['busy'] else '○'} {p['label']:<9} {det}")
     if s["loose"]:
         print(tr("loose_hint"))
         for x in s["loose"]:
@@ -780,22 +871,35 @@ def qt_app(mode):
                         q.drawText(QRectF(cx - 40, r.top() + 3, 80, 14), Qt.AlignCenter, pt.get("mark", ""))
                         q.setFont(font(11, bold=busy)); q.setPen(RED if busy else DIM)
                         q.drawText(QRectF(cx - 50, r.bottom() + 3, 100, 16), Qt.AlignCenter, pt["label"])
+                        st = next((x for x in pt["stats"] if x), "")
+                        if st and self.s["show_stats"]:
+                            short = st.split(" · ")[-1] if len(st) > 18 else st
+                            q.setFont(font(9)); q.setPen(QColor("#b5565a"))
+                            q.drawText(QRectF(cx - 60, r.bottom() + 18, 120, 14), Qt.AlignCenter, short)
                         self.rects[pt["id"]] = QRectF(cx - 36, r.top(), 72, r.height() + 20)
                     if g.get("tower"):
                         self.tower(q, QRectF(W - 24 - tower_w + 8, y + 2, tower_w - 8, h + 18))
                     x += gw + gap
-                y += h + 52
+                y += h + (64 if self.s["show_stats"] else 52)
             # connected / events
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(28, y + 6), tr("connected"))
             q.setFont(font(13))
             yy = y + 28
-            rows = [(pt["label"], it, RED) for pt in self.s["ports"].values() for it in pt["items"]]
-            rows += [("?", it, QColor("#c9a227")) for it in self.s["loose"]]
+            rows = [(pt["label"], it, st, RED) for pt in self.s["ports"].values() for it, st in zip(pt["items"], pt["stats"])]
+            rows += [("?", it, st, QColor("#c9a227")) for it, st in zip(self.s["loose"], self.s["loose_stats"])]
+            if self.s.get("dock_hidden"):
+                rows.append(("—", tr("dock_hidden"), "", DIM))
             if not rows:
                 q.setPen(DIM); q.drawText(QPointF(40, yy), tr("nothing")); yy += 20
-            for lab, it, col in rows[: max(1, int((H - yy - 50) // 20))]:
+            for lab, it, st, col in rows[: max(1, int((H - yy - 50) // 20))]:
                 q.setPen(Qt.NoPen); q.setBrush(col); q.drawEllipse(QPointF(36, yy - 4), 3.5, 3.5)
-                q.setPen(col); q.drawText(QPointF(48, yy), lab); q.setPen(TXT); q.drawText(QPointF(140, yy), it); yy += 20
+                q.setPen(col); q.drawText(QPointF(48, yy), lab); q.setPen(TXT); q.drawText(QPointF(140, yy), it)
+                if st:
+                    fm = QFontMetricsF(font(13))
+                    q.setFont(font(12)); q.setPen(QColor("#b5565a"))
+                    q.drawText(QPointF(150 + fm.horizontalAdvance(it), yy), st)
+                    q.setFont(font(13))
+                yy += 20
             ex = W * 0.60
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(ex, y + 6), tr("events"))
             q.setFont(font(12)); q.setPen(DIM)
@@ -812,12 +916,18 @@ def qt_app(mode):
             q.drawText(QRectF(W - 222, fy - 16, 210, 18), Qt.AlignLeft, "Technologies and Design")
             q.end()
 
+        def contextMenuEvent(self, e):
+            m = QMenu(self)
+            populate(m, in_window=True)
+            m.exec(e.globalPos())
+
         def mouseMoveEvent(self, e):
             pos = e.position() / self.scale
             hit = next((k for k, r in self.rects.items() if r.contains(pos)), None)
             if hit:
                 pt = self.s["ports"][hit]
-                self.setToolTip(f"<b>{pt['label']}</b><br>" + ("<br>".join(pt["items"]) or tr("free")))
+                lines = [i + (f" <span style='color:#d06a6e'>{st}</span>" if st else "") for i, st in zip(pt["items"], pt["stats"])]
+                self.setToolTip(f"<b>{pt['label']}</b><br>" + ("<br>".join(lines) or tr("free")))
             else:
                 self.setToolTip("")
 
@@ -855,7 +965,7 @@ def qt_app(mode):
         QLocalServer.removeServer(sock_name)
     view = DockView()
     state = {"prev": view.s}
-    tray, menu_actions = None, {}
+    tray = None
 
     def tick():
         s = snapshot()
@@ -868,43 +978,64 @@ def qt_app(mode):
             for e in ev[:3]:
                 tray.showMessage("dockwatch", e, QSystemTrayIcon.Information, 4000)
 
-    def set_lang(code):
+    def apply(**kw):
         global LANG
-        LANG = code
         cfg = load_config()
-        cfg["lang"] = code
+        cfg.update(kw)
         save_config(cfg)
-        for k, a in menu_actions.items():
-            a.setText(tr(k))
-        state["prev"] = None  # labels change with the language — don't report it as plug events
-        view.log = []
+        if "lang" in kw:
+            LANG = kw["lang"]
+            view.log = []
+        state["prev"] = None  # смена языка/профиля — не событие подключения
         tick()
+
+    def populate(menu, in_window=False):
+        menu.clear()
+        cfg = load_config()
+        me = os.path.abspath(__file__)
+        if not in_window:
+            menu.addAction(tr("m_show"), lambda: (view.show(), view.raise_(), view.activateWindow()))
+        menu.addAction(tr("m_tui"), lambda: subprocess.Popen(["konsole", "-e", sys.executable, me, "tui"]))
+        menu.addAction(tr("m_cal"), lambda: subprocess.Popen(["konsole", "-e", sys.executable, me, "calibrate"]))
+        menu.addSeparator()
+        for key, opt in (("m_stats", "show_stats"), ("m_hidedock", "hide_dock")):
+            a = menu.addAction(tr(key))
+            a.setCheckable(True)
+            a.setChecked(bool(cfg.get(opt)))
+            a.toggled.connect(lambda v, o=opt: apply(**{o: v}))
+        det_dock, det_laptop = detect_profiles(cfg, usb_devices())
+        for title, kind, choice_key, det, extra in (
+                ("m_laptop", "laptops", "laptop_choice", det_laptop, []),
+                ("m_dock", "docks", "dock_choice", det_dock or {"name": cfg.get("dock") and next(
+                    (p["name"] for p in load_profiles("docks") if p["id"] == cfg.get("dock")), None) or tr("not_found")},
+                 [("none", tr("no_dock"))])):
+            sub = menu.addMenu(tr(title))
+            grp = QActionGroup(sub)
+            cur = cfg.get(choice_key, "auto")
+            opts = [("auto", tr("auto", x=(det or {}).get("name") or tr("not_found")))]
+            opts += [(p["id"], p["name"]) for p in load_profiles(kind)] + extra
+            for val, name in opts:
+                a = sub.addAction(name)
+                a.setCheckable(True)
+                a.setChecked(val == cur)
+                grp.addAction(a)
+                a.triggered.connect(lambda _=False, k=choice_key, v=val: apply(**{k: v}))
+        sub = menu.addMenu(tr("m_lang"))
+        grp = QActionGroup(sub)
+        for code, name in (("uk", "Українська"), ("ru", "Русский"), ("en", "English")):
+            a = sub.addAction(name)
+            a.setCheckable(True)
+            a.setChecked(code == LANG)
+            grp.addAction(a)
+            a.triggered.connect(lambda _=False, c=code: apply(lang=c))
+        menu.addSeparator()
+        menu.addAction(tr("m_quit"), app.quit)
 
     if tray_mode and QSystemTrayIcon.isSystemTrayAvailable():
         tray = QSystemTrayIcon(tray_icon(view.s["busy"], view.s["docked"]))
         menu = QMenu()
-        me = os.path.abspath(__file__)
-        for key, fn in (("m_show", lambda: (view.show(), view.raise_(), view.activateWindow())),
-                        ("m_tui", lambda: subprocess.Popen(["konsole", "-e", sys.executable, me, "tui"])),
-                        ("m_cal", lambda: subprocess.Popen(["konsole", "-e", sys.executable, me, "calibrate"]))):
-            a = QAction(tr(key), menu)
-            a.triggered.connect(fn)
-            menu.addAction(a)
-            menu_actions[key] = a
-        lang_menu = menu.addMenu(tr("m_lang"))
-        menu_actions["m_lang"] = lang_menu.menuAction()
-        grp = QActionGroup(lang_menu)
-        for code, name in (("uk", "Українська"), ("ru", "Русский"), ("en", "English")):
-            a = QAction(name, lang_menu)
-            a.setCheckable(True)
-            a.setChecked(code == LANG)
-            a.triggered.connect(lambda _=False, c=code: set_lang(c))
-            grp.addAction(a)
-            lang_menu.addAction(a)
-        a = QAction(tr("m_quit"), menu)
-        a.triggered.connect(app.quit)
-        menu.addAction(a)
-        menu_actions["m_quit"] = a
+        populate(menu)
+        menu.aboutToShow.connect(lambda: populate(menu))
         tray.setContextMenu(menu)
         tray.activated.connect(lambda r: (view.setVisible(not view.isVisible()), view.raise_())
                                if r == QSystemTrayIcon.Trigger else None)
