@@ -1021,14 +1021,62 @@ def diff(old, new):
     return ev
 
 
+def state_json(s, events=None):
+    """Состояние для виджета и телефона: схема (группы и порты с координатами) + всё, что видно в окне."""
+    cfg = load_config()
+    return {"docked": s["docked"], "busy": s["busy"], "total": s["total"], "lang": LANG,
+            "theme": cfg.get("theme", "thinkpad"), "show_stats": s["show_stats"],
+            "dock": (s["dock"] or {}).get("name"), "laptop": (s["laptop"] or {}).get("name"),
+            "groups": [{k: g.get(k) for k in ("id", "title", "row", "w", "tower", "vents", "bezel")} for g in s["groups"]],
+            "ports": [{"id": p["id"], "label": p["label"], "group": p["g"], "kind": p["kind"], "x": p["x"],
+                       "mark": p.get("mark", ""), "busy": p["busy"], "items": p["items"], "stats": p["stats"]}
+                      for p in s["ports"].values()],
+            "loose": s["loose"], "loose_stats": s["loose_stats"], "media": s["media"], "sensors": s["sensors"],
+            "power": s["power"], "battery": s.get("battery"), "net": s.get("net"), "os": s["os"],
+            "events": events or [], "dock_hidden": s.get("dock_hidden"),
+            "tr": {k: tr(k) for k in ("docked", "undocked", "connected", "events", "nothing", "quiet", "free", "mic", "cam", "spk",
+                                      "muted", "on", "cam_free", "cam_none", "kbd", "kbd_off", "rpm", "dock_hidden")}}
+
+
 def dump_json():
-    s = snapshot()
-    out = {"docked": s["docked"], "busy": s["busy"], "total": s["total"],
-           "dock": (s["dock"] or {}).get("name"), "laptop": (s["laptop"] or {}).get("name"),
-           "ports": [{"id": p["id"], "label": p["label"], "group": p["g"], "busy": p["busy"], "items": p["items"],
-                      "stats": p["stats"]} for p in s["ports"].values()],
-           "loose": s["loose"], "media": s["media"], "sensors": s["sensors"], "power": s["power"], "os": s["os"]}
-    print(json.dumps(out, ensure_ascii=False))
+    print(json.dumps(state_json(snapshot()), ensure_ascii=False))
+
+
+# ---------------------------------------------------------------- плагины
+PLUGIN_DIRS = [os.path.expanduser("~/.local/share/dockwatch/plugins"), os.path.join(HERE, "plugins")]
+PLUGINS = []
+
+
+def load_plugins():
+    """Дополнительные модули: *.py из ~/.local/share/dockwatch/plugins (и plugins/ рядом с программой).
+    Плагин может определить: TR (переводы), CLI {"режим": функция}, on_start(ctx), on_tick(s, events, ctx),
+    menu(add, ctx) — пункты меню. Модуль получает ссылку на DockWatch в атрибуте dw."""
+    import importlib.util
+    if PLUGINS:
+        return PLUGINS
+    me = sys.modules[__name__]
+    for d in PLUGIN_DIRS:
+        for f in sorted(glob.glob(os.path.join(d, "*.py"))):
+            try:
+                spec = importlib.util.spec_from_file_location(f"dockwatch_plugin_{os.path.basename(f)[:-3]}", f)
+                mod = importlib.util.module_from_spec(spec)
+                mod.dw = me
+                spec.loader.exec_module(mod)
+                TR.update(getattr(mod, "TR", {}))
+                PLUGINS.append(mod)
+            except Exception as e:  # noqa: BLE001 — сломанный плагин не должен ронять программу
+                print(f"plugin {f}: {e}", file=sys.stderr)
+    return PLUGINS
+
+
+def plugin_call(name, *a):
+    for m in PLUGINS:
+        fn = getattr(m, name, None)
+        if fn:
+            try:
+                fn(*a)
+            except Exception as e:  # noqa: BLE001
+                print(f"plugin {getattr(m, '__name__', m)}.{name}: {e}", file=sys.stderr)
 
 
 def dump():
@@ -1739,6 +1787,7 @@ def qt_app(mode):
     view = DockView()
     state = {"prev": view.s}
     tray = None
+    ctx = {}  # передаётся плагинам; заполняется ниже, когда всё создано
 
     def notify(text):
         if tray:
@@ -1846,6 +1895,7 @@ def qt_app(mode):
         ev = diff(prev, s)
         state["prev"] = s
         view.update_state(s, ev)
+        plugin_call("on_tick", s, ev, ctx)
         for e in ev:
             log_event(e)
         if ev:
@@ -1886,6 +1936,7 @@ def qt_app(mode):
         if not in_window:
             menu.addAction(tr("m_show"), lambda: (view.show(), view.raise_(), view.activateWindow()))
         menu.addAction(tr("m_settings"), settings)
+        plugin_call("menu", lambda title, fn: menu.addAction(title, fn), ctx)
         menu.addAction(tr("m_tui"), lambda: run_in_terminal("tui"))
         menu.addAction(tr("m_cal"), lambda: run_in_terminal("calibrate"))
         menu.addSeparator()
@@ -1985,6 +2036,9 @@ def qt_app(mode):
         else:
             view.anim_t = time.monotonic()
 
+    ctx.update({"view": view, "tray": lambda: tray, "app": app, "notify": notify,
+                "QtWidgets": __import__("PySide6.QtWidgets", fromlist=["x"]), "QtGui": __import__("PySide6.QtGui", fromlist=["x"]), "Qt": Qt})
+    plugin_call("on_start", ctx)
     anim = QTimer()
     anim.timeout.connect(anim_tick)
     anim.start(50)
@@ -2002,11 +2056,13 @@ def qt_app(mode):
 def main():
     global LANG
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", nargs="?", default="app", choices=["app", "tray", "gui", "tui", "calibrate", "dump", "json"])
+    load_plugins()
+    extra = {k: v for m in PLUGINS for k, v in getattr(m, "CLI", {}).items()}
+    ap.add_argument("mode", nargs="?", default="app", choices=["app", "tray", "gui", "tui", "calibrate", "dump", "json", *extra])
     ap.add_argument("--lang", choices=LANGS)
     a = ap.parse_args()
     LANG = detect_lang(load_config(), a.lang)
-    {"tui": tui, "calibrate": calibrate, "dump": dump, "json": dump_json}.get(a.mode, lambda: qt_app(a.mode))()
+    {"tui": tui, "calibrate": calibrate, "dump": dump, "json": dump_json, **extra}.get(a.mode, lambda: qt_app(a.mode))()
 
 
 if __name__ == "__main__":

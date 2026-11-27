@@ -88,6 +88,9 @@ Profiles are plain JSON — copy an existing one:
 Check it with `python tools/check_profiles.py` (also run by GitHub Actions on every push), then run `dockwatch calibrate` once. New profiles are welcome — open an issue with the **New dock / laptop profile** form
 (photo of the ports + `lsusb`).
 
+## Plugins
+Extra modules can be dropped into `~/.local/share/dockwatch/plugins/*.py`. A plugin may define `TR` (translations), `CLI` (extra command-line modes), `on_start(ctx)`, `on_tick(state, events, ctx)` and `menu(add, ctx)`; the DockWatch module is available as `dw`.
+
 ## Config
 `~/.config/dockwatch/config.json` — port bindings, custom labels, language, chosen profiles, options.
 
