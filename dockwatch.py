@@ -132,6 +132,7 @@ TR = {
     "m_autostart": {"uk": "Запускати при вході в систему", "ru": "Запускать при входе в систему", "en": "Start at login"},
     "m_history": {"uk": "Журнал підключень", "ru": "Журнал подключений", "en": "Connection log"},
     "m_lid": {"uk": "Блимати точкою на кришці при подіях", "ru": "Мигать точкой на крышке при событиях", "en": "Blink the lid dot on events"},
+    "m_lid_on": {"uk": "Точка на кришці горить постійно", "ru": "Точка на крышке горит постоянно", "en": "Keep the lid dot lit"},
     "m_lid_na": {"uk": "Точка на кришці: потрібне правило udev (install-root.sh)", "ru": "Точка на крышке: нужно правило udev (install-root.sh)",
                  "en": "Lid dot: needs the udev rule (install-root.sh)"},
     "m_profile": {"uk": "Профіль живлення", "ru": "Профиль питания", "en": "Power profile"},
@@ -197,6 +198,7 @@ def load_config():
     cfg.setdefault("show_stats", True)
     cfg.setdefault("hide_dock", False)
     cfg.setdefault("lid_blink", False)
+    cfg.setdefault("lid_on", False)
     return cfg
 
 
@@ -1509,7 +1511,8 @@ def qt_app(mode):
     def blink(n=3):
         if not (load_config().get("lid_blink") and lid_dot_writable()):
             return
-        was = rd(LID_DOT) == "1"
+        was = rd(LID_DOT) == "1" or bool(load_config().get("lid_on"))
+        state["blinking_until"] = time.time() + n * 2 * 0.22 + 0.5
         for i in range(n * 2):
             QTimer.singleShot(i * 220, lambda on=(i % 2 == 0) != was: lid_dot(on))
         QTimer.singleShot(n * 2 * 220, lambda: lid_dot(was))
@@ -1529,6 +1532,8 @@ def qt_app(mode):
             log_event(e)
         if ev:
             blink()
+        elif load_config().get("lid_on") and lid_dot_writable() and rd(LID_DOT) != "1" and not state.get("blinking_until", 0) > s["ts"]:
+            lid_dot(True)  # держим точку включённой (после сна система её гасит)
         # «не забудь флешку»: сняли с дока или закрыли крышку, а носитель всё ещё смонтирован
         if prev and ((prev["docked"] and not s["docked"]) or (not prev.get("lid_closed") and s.get("lid_closed"))):
             left = [pt["label"] for pt in prev["ports"].values() if any(mounted(d) for d in pt.get("disks", []))]
@@ -1573,6 +1578,10 @@ def qt_app(mode):
             a.setCheckable(True)
             a.setChecked(bool(cfg.get("lid_blink")))
             a.toggled.connect(lambda v: (apply(lid_blink=v), v and blink(2)))
+            a = menu.addAction(tr("m_lid_on"))
+            a.setCheckable(True)
+            a.setChecked(bool(cfg.get("lid_on")))
+            a.toggled.connect(lambda v: (apply(lid_on=v), lid_dot(v)))
         elif os.path.exists(LID_DOT):
             a = menu.addAction(tr("m_lid_na"))
             a.setEnabled(False)
