@@ -1653,6 +1653,7 @@ def qt_app(mode):
             self.logos = {n: asset(f"{n}.png") for n in ("thinkpad", "ibm", "lenovo")}
             self.hist = {}
             self.editing = False
+            self.gear_hover = False
             self.drag = None
             self.grects = {}
             self.lit = {}        # pid -> когда порт загорелся (для плавного зажигания)
@@ -2095,6 +2096,11 @@ def qt_app(mode):
             q.setFont(font(12, italic=True)); q.setPen(TXT)
             q.drawText(QRectF(W - 222, fy - 16, 210, 18), Qt.AlignLeft,
                        (self.s.get("laptop") or {}).get("footer") or "Technologies and Design")
+            # кнопка настроек справа снизу
+            self.gear = QRectF(W - 58, fy - 60, 34, 34)
+            q.setPen(QPen(EDGE, 1.2)); q.setBrush(KEYC); q.drawRoundedRect(self.gear, 7, 7)
+            f_ = font(19); q.setFont(f_); q.setPen(TXT if self.gear_hover else DIM)
+            q.drawText(self.gear, Qt.AlignCenter, "⚙")
             o = self.s.get("os") or {}
             if o:  # система: логотип дистрибутива + название, ядро, рабочий стол
                 if not hasattr(self, "os_icon"):
@@ -2199,9 +2205,12 @@ def qt_app(mode):
             return next((gid for gid, (r, _) in self.grects.items() if r.adjusted(-6, -24, 6, 24).contains(pos)), None)
 
         def mousePressEvent(self, e):
+            pos = e.position() / self.scale
+            if e.button() == Qt.LeftButton and getattr(self, "gear", None) is not None and self.gear.contains(pos):
+                settings()
+                return
             if not self.editing or e.button() != Qt.LeftButton:
                 return
-            pos = e.position() / self.scale
             self.drag = next((k for k, r in self.rects.items() if r.contains(pos)), None)
 
         def mouseReleaseEvent(self, e):
@@ -2222,6 +2231,14 @@ def qt_app(mode):
 
         def mouseMoveEvent(self, e):
             pos = e.position() / self.scale
+            hov = getattr(self, "gear", None) is not None and self.gear.contains(pos)
+            if hov != self.gear_hover:
+                self.gear_hover = hov
+                self.setCursor(Qt.PointingHandCursor if hov else Qt.ArrowCursor)
+                self.update()
+            if hov:
+                self.setToolTip(tr("m_settings").rstrip("…"))
+                return
             if self.editing and getattr(self, "drag", None):
                 pt = self.s["ports"][self.drag]
                 gid = self.group_at(pos) or pt["g"]
