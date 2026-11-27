@@ -88,6 +88,14 @@ NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-l
 
 Docks are detected by the VID:PID of their internal USB hubs, laptops by DMI; both can be chosen manually in the menu.
 
+### Any laptop without a profile
+If there is no profile for your laptop, DockWatch builds one on the fly from what Linux sees: USB-A / USB-C ports
+(already bound, USB 2 and USB 3 of one connector merged), HDMI, Ethernet, audio jack, card reader, camera. Ports are spread
+evenly over the two sides, side widths follow the number of ports, and the theme and wordmark follow the brand
+(ThinkPad, Legion, IdeaPad/Yoga, ROG/TUF, ZenBook/VivoBook, XPS/Latitude, Alienware, EliteBook/OMEN, Nitro/Predator/Aspire,
+MSI, Framework, Razer, Galaxy Book, MateBook, RedmiBook, AORUS…). The order of ports may differ from the real one —
+`dockwatch make-profile` saves this layout as a JSON template: fix it by a photo and send it as a PR.
+
 ### Adding your dock or laptop
 Profiles are plain JSON — copy an existing one:
 - `match` — detection: `usb_hubs` (VID:PID of the dock's hubs, see `lsusb`) or `dmi` (substring of `/sys/class/dmi/id/product_version`).

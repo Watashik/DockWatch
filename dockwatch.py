@@ -162,6 +162,11 @@ TR = {
     "theme_thinkpad": {"uk": "ThinkPad (чорна)", "ru": "ThinkPad (чёрная)", "en": "ThinkPad (black)"},
     "theme_ibm": {"uk": "IBM (червоний, синій, зелений)", "ru": "IBM (красный, синий, зелёный)", "en": "IBM (red, blue, green)"},
     "theme_nitro": {"uk": "Acer Nitro (чорна, блакитно-фіолетова)", "ru": "Acer Nitro (чёрная, сине-фиолетовая)", "en": "Acer Nitro (black, blue-violet)"},
+    **{f"theme_{k}": {"uk": v, "ru": v, "en": v} for k, v in (
+        ("legion", "Lenovo Legion"), ("lenovo", "Lenovo"), ("rog", "ASUS ROG"), ("asus", "ASUS"), ("alienware", "Alienware"),
+        ("omen", "HP OMEN"), ("acer", "Acer"), ("msi", "MSI"), ("razer", "Razer"), ("gigabyte", "Gigabyte / AORUS"),
+        ("generic", "Universal"), ("dell", "Dell"), ("framework", "Framework"), ("samsung", "Samsung"), ("huawei", "Huawei"),
+        ("xiaomi", "Xiaomi"), ("apple", "Apple"))},
     "theme_hp": {"uk": "HP (алюміній, блакитний)", "ru": "HP (алюминий, голубой)", "en": "HP (aluminium, blue)"},
     "theme_auto": {"uk": "Авто (за ноутбуком)", "ru": "Авто (по ноутбуку)", "en": "Auto (by laptop)"},
     "theme_light": {"uk": "Світла", "ru": "Светлая", "en": "Light"},
@@ -290,6 +295,115 @@ def detect_profiles(cfg, devs):
     return dock, laptop
 
 
+# Бренды: ключевое слово в DMI (производитель / линейка / модель) → надпись в шапке и тема.
+BRANDS = [
+    ("ThinkPad", "ThinkPad", "thinkpad"), ("Legion", "LEGION", "legion"), ("IdeaPad", "IdeaPad", "lenovo"),
+    ("Yoga", "YOGA", "lenovo"), ("ThinkBook", "ThinkBook", "lenovo"), ("LENOVO", "Lenovo", "lenovo"),
+    ("ROG", "ROG", "rog"), ("TUF", "TUF Gaming", "rog"), ("Zenbook", "ZenBook", "asus"), ("ZenBook", "ZenBook", "asus"),
+    ("Vivobook", "VivoBook", "asus"), ("VivoBook", "VivoBook", "asus"), ("ASUS", "ASUS", "asus"),
+    ("Alienware", "ALIENWARE", "alienware"), ("XPS", "XPS", "dell"), ("Latitude", "Latitude", "dell"),
+    ("Precision", "Precision", "dell"), ("Inspiron", "Inspiron", "dell"), ("Vostro", "Vostro", "dell"), ("Dell", "DELL", "dell"),
+    ("EliteBook", "EliteBook", "hp"), ("ProBook", "ProBook", "hp"), ("ZBook", "ZBook", "hp"), ("OMEN", "OMEN", "omen"),
+    ("Victus", "VICTUS", "omen"), ("Pavilion", "Pavilion", "hp"), ("Spectre", "SPECTRE", "hp"), ("HP", "HP", "hp"),
+    ("Nitro", "NITRO", "nitro"), ("Predator", "PREDATOR", "nitro"), ("Swift", "Swift", "acer"), ("Aspire", "Aspire", "acer"),
+    ("Acer", "acer", "acer"), ("Micro-Star", "MSI", "msi"), ("MSI", "MSI", "msi"), ("Framework", "Framework", "framework"),
+    ("Razer", "RAZER", "razer"), ("Galaxy Book", "Galaxy Book", "samsung"), ("SAMSUNG", "Galaxy Book", "samsung"),
+    ("MateBook", "MateBook", "huawei"), ("HUAWEI", "HUAWEI", "huawei"), ("HONOR", "HONOR", "huawei"),
+    ("Redmi", "RedmiBook", "xiaomi"), ("TIMI", "Xiaomi", "xiaomi"), ("Xiaomi", "Xiaomi", "xiaomi"),
+    ("AORUS", "AORUS", "gigabyte"), ("GIGABYTE", "GIGABYTE", "gigabyte"), ("Apple", "MacBook", "apple"),
+    ("TongFang", "Laptop", "generic"), ("CLEVO", "Laptop", "generic"),
+]
+
+
+def dmi():
+    keys = ("sys_vendor", "product_family", "product_version", "product_name", "board_vendor")
+    return {k: rd(f"/sys/class/dmi/id/{k}") for k in keys}
+
+
+def brand_of(d=None):
+    d = d or dmi()
+    text = " ".join(d.values())
+    for kw, brand, theme in BRANDS:
+        if kw.lower() in text.lower():
+            return brand, theme
+    return (d.get("sys_vendor") or "Laptop").split()[0].title(), "generic"
+
+
+def generic_profile():
+    """Автосхема для ноутбука без профиля: порты из того, что видит система (USB/USB-C с привязкой,
+    HDMI, LAN, аудио, кард-ридер, камера), разложенные по бокам. Основа для своего профиля (make-profile)."""
+    d = dmi()
+    brand, theme = brand_of(d)
+    model = d["product_version"] if d["product_version"] and d["product_version"].lower() not in ("none", "default string") else d["product_name"]
+    # физические USB-порты: USB 2 и USB 3 одного разъёма склеиваем через peer
+    phys, seen = [], set()
+    for hub in sorted(glob.glob("/sys/bus/usb/devices/usb[0-9]*")):
+        bus = os.path.basename(hub)[3:]
+        for pdir in sorted(glob.glob(f"{hub}/{bus}-0:1.0/usb{bus}-port*"), key=lambda x: int(re.sub(r"\D", "", x.rsplit("port", 1)[1]) or 0)):
+            num = pdir.rsplit("port", 1)[1]
+            name = f"{bus}-{num}"
+            if name in seen or rd(f"{pdir}/connect_type") != "hotplug":
+                continue
+            peer = peer_of(name)
+            seen.update({name, peer} - {None})
+            panel = rd(f"{pdir}/physical_location/panel")
+            typec = os.path.exists(f"{pdir}/connector") or (peer and os.path.exists(
+                f"/sys/bus/usb/devices/usb{peer.split('-')[0]}/{peer.split('-')[0]}-0:1.0/usb{peer.split('-')[0]}-port{peer.split('-')[1]}/connector"))
+            phys.append({"keys": [name] + ([peer] if peer else []), "panel": panel, "typec": bool(typec)})
+    hdmi = [os.path.basename(c).split("-", 1)[1] for c in glob.glob("/sys/class/drm/card*-HDMI-A-*")]
+    lan = any("/usb" not in os.path.realpath(f"{n}/device") for n in glob.glob("/sys/class/net/en*") if os.path.exists(f"{n}/device"))
+    sd = bool(glob.glob("/sys/bus/pci/drivers/rtsx_pci/0000:*") or glob.glob("/sys/bus/pci/drivers/sdhci-pci/0000:*")
+              or glob.glob("/sys/bus/platform/drivers/rtsx_pci_sdmmc/*") or glob.glob("/sys/bus/usb/drivers/rtsx_usb/*"))
+    jack = any("USB" not in rd(f"{c}/id") for c in glob.glob("/proc/asound/card[0-9]*") if os.path.exists(f"{c}/id"))
+    cam = bool(glob.glob("/dev/video*"))
+    left, right = [], []
+    left.append({"id": "power", "kind": "barrel_dot", "mark": "⎓", "label": "@power", "role": "power"})
+    if lan:
+        left.append({"id": "eth", "kind": "rj45", "mark": "⊞", "label": "LAN", "role": "eth"})
+    for i, h in enumerate(hdmi):
+        left.append({"id": f"hdmi{i + 1}", "kind": "hdmi", "mark": "HDMI", "label": "HDMI", "video": True, "drm": [h]})
+    usb_map, n_usb, n_c = {}, 0, 0
+    # стороны: по ACPI (_PLD), если оно есть и не «unknown»; иначе поочерёдно (больше портов — слева)
+    known = [p for p in phys if p["panel"] in ("left", "right")]
+    for i, ph in enumerate(phys):
+        side = ph["panel"] if len(known) == len(phys) and ph["panel"] in ("left", "right") else ("left" if i % 2 == 0 else "right")
+        if ph["typec"]:
+            n_c += 1
+            pid, port = f"usbc{n_c}", {"kind": "usbc", "mark": "⇆", "label": "USB-C" if n_c == 1 else f"USB-C {n_c}"}
+        else:
+            n_usb += 1
+            pid, port = f"usb{n_usb}", {"kind": "usb", "mark": "SS", "label": "USB" if n_usb == 1 else f"USB {n_usb}"}
+        (left if side == "left" else right).append(dict(port, id=pid))
+        for k in ph["keys"]:
+            usb_map[f"lap:{k}"] = pid
+    if jack:
+        right.insert(0, {"id": "audio", "kind": "audio", "mark": "🎧", "label": "@audio", "role": "jack"})
+    if sd:
+        right.insert(1 if jack else 0, {"id": "sd", "kind": "sdslot", "mark": "SD", "label": "@card", "role": "card"})
+    for kind, base in (("usb", "USB"), ("usbc", "USB-C"), ("hdmi", "HDMI")):  # нумерация слева направо, если их несколько
+        same = [p_ for p_ in left + right if p_["kind"] == kind]
+        for i, p_ in enumerate(same):
+            p_["label"] = base if len(same) == 1 else f"{base} {i + 1}"
+    vents = len(right) <= 3
+    ports = []
+    for g, lst, span in (("left", left, 1.0), ("right", right, 0.42 if vents else 1.0)):
+        for i, p_ in enumerate(lst):
+            p_.update(g=g, x=round((i + 0.5) / len(lst) * span, 3))
+            ports.append(p_)
+    nl, nr = max(1, len(left)), max(1, len(right) + (3 if vents else 0))
+    groups = []
+    if cam:
+        groups.append({"id": "bezel", "row": -1, "w": 1.0, "height": 56, "bezel": True, "title": "bezel"})
+    groups += [{"id": "left", "row": 1, "w": round(nl / (nl + nr), 2), "height": 62,
+                "title": {"uk": f"{brand} · лівий бік", "ru": f"{brand} · левый бок", "en": f"{brand} · left side"}},
+               {"id": "right", "row": 1, "w": round(nr / (nl + nr), 2), "height": 62,
+                "title": {"uk": "правий бік", "ru": "правый бок", "en": "right side"}, **({"vents": [0.46, 0.96]} if vents else {})}]
+    return {"id": "auto", "name": f"{d['sys_vendor']} {model}".strip(), "auto": True, "theme": theme, "brand": brand,
+            "footer": f"{d['sys_vendor'].split()[0] if d['sys_vendor'] else ''} {model}".strip(),
+            "match": {"dmi": [model]}, "note": "Auto-generated: check the order of ports against a photo.",
+            "groups": groups, "ports": ports, "usb": usb_map}
+
+
 def select_profiles(cfg, devs):
     det_dock, det_laptop = detect_profiles(cfg, devs)
     docks = {p["id"]: p for p in load_profiles("docks")}
@@ -298,6 +412,8 @@ def select_profiles(cfg, devs):
     dock = None if dc == "none" else docks.get(dc) if dc != "auto" else (det_dock or docks.get(cfg.get("dock")))
     lc = cfg.get("laptop_choice", "auto")
     laptop = laptops.get(lc) if lc != "auto" else det_laptop
+    if laptop is None and lc in ("auto", "generic"):
+        laptop = generic_profile()  # профиля нет — схема по тому, что видит система
     return dock, laptop
 
 
@@ -1025,7 +1141,9 @@ def snapshot(cfg=None):
             item += f" · {speed_text(d['speed'])}"
         stat, spd = usb_stats(d["name"])
         stat = stat if show else ""
-        pid = usb_map.get(d["key"])
+        pid = cfg["usb"].get(d["key"])
+        if pid not in ports:  # своя калибровка от другого профиля — берём встроенную привязку
+            pid = {**(laptop or {}).get("usb", {}), **(dock or {}).get("usb", {})}.get(d["key"])
         if pid in ports:
             put(pid, item, stat)
             ports[pid]["disks"] += usb_disks(d["name"])
@@ -1159,6 +1277,18 @@ def state_json(s, events=None):
             "events": events or [], "dock_hidden": s.get("dock_hidden"),
             "tr": {k: tr(k) for k in ("docked", "undocked", "connected", "events", "nothing", "quiet", "free", "mic", "cam", "spk",
                                       "muted", "on", "cam_free", "cam_none", "kbd", "kbd_off", "rpm", "dock_hidden")}}
+
+
+def make_profile():
+    """dockwatch make-profile — заготовка профиля этого ноутбука (JSON) для правки по фото и PR."""
+    p = generic_profile()
+    p.pop("auto", None)
+    slug = re.sub(r"[^a-z0-9]+", "-", p["name"].lower()).strip("-") or "my-laptop"
+    p["id"] = slug
+    out = os.path.join(os.getcwd(), f"{slug}.json")
+    with open(out, "w") as f:
+        json.dump(p, f, ensure_ascii=False, indent=2)
+    print(f"{out}\n→ поправь порядок портов (x) и виды разъёмов по фото, положи в profiles/laptops/ и пришли PR.")
 
 
 def dump_json():
@@ -1303,7 +1433,7 @@ def tui():
         prev, log = None, []
         glyph = {"usb": "▭", "usbc": "⊂⊃", "vga": "▽", "dp": "◺", "hdmi": "⬡", "dc": "▣", "rj45": "⊞",
                  "audio": "◉", "card": "▬", "dockport": "⊂▭⊃", "barrel": "◎", "sidedock": "▮", "smartcard": "▬",
-                 "sim": "|", "lock": "🔒", "sdslot": "▬", "barrel_led": "◎|", "barrel_dot": "·◎", "led": "•"}
+                 "sim": "|", "lock": "🔒", "sdslot": "▬", "barrel_led": "◎|", "barrel_dot": "·◎", "led": "•", "minidp": "◺", "microhdmi": "⬡"}
         while True:
             s = snapshot()
             for e in diff(prev, s):
@@ -1388,6 +1518,18 @@ def qt_app(mode):
         "ibm": dict(red="#E2231A", body="#1c1e22", edge="#2d3036", hole="#070708", metal="#8e9196", ink="#6d7078",
                     txt="#e8eaee", dim="#7d818a", bg="#101215", body_hi="#24272c", body_lo="#16181c", stat="#6f9fe0", line="#1F70C1",
                     blue="#1F70C1", green="#2EA44F"),
+        **{name: dict(red=acc, body="#1a1b1f", edge="#2a2c32", hole="#060607", metal="#80848c", ink="#62666e", txt="#ebedf0",
+                      dim="#80858d", bg="#0e0f12", body_hi="#222429", body_lo="#131418", stat=acc, line=line or acc, **extra)
+           for name, acc, line, extra in (
+               ("legion", "#3bb2ff", "#3bb2ff", {}), ("lenovo", "#e2231a", None, {}), ("rog", "#ff1f3a", None, {"grad": "#ff1f3a,#ff7a00"}),
+               ("asus", "#1e9fff", None, {}), ("alienware", "#00e0ff", "#9b5cff", {"grad": "#00e0ff,#9b5cff"}),
+               ("omen", "#e41e26", None, {}), ("acer", "#83b81a", None, {}), ("msi", "#e60012", None, {}),
+               ("razer", "#44d62c", None, {}), ("gigabyte", "#ff7a00", None, {}), ("generic", "#3fb6a8", None, {}))},
+        **{name: dict(red=acc, body="#c3c6cb", edge="#9a9da2", hole="#141518", metal="#6c6f73", ink="#5c5f63", txt="#eef1f4",
+                      dim="#8d939b", bg="#16191d", body_hi="#dadcdf", body_lo="#a3a6aa", stat=acc, line=acc, port_edge="#5a5d61",
+                      pin="#2c2e31", key="#1d2025", key_edge="#33373d", led_on="#ffffff", lens="#0d0e10")
+           for name, acc in (("dell", "#0076ce"), ("framework", "#f26722"), ("samsung", "#1f5bd6"), ("huawei", "#cf0a2c"),
+                             ("xiaomi", "#ff6900"), ("apple", "#8e8e93"))},
         "nitro": dict(red="#2FA8FF", body="#17191f", edge="#272b33", hole="#06070a", metal="#7d828c", ink="#5d636e",
                       txt="#e9ecf2", dim="#7f8590", bg="#0c0d11", body_hi="#1f2229", body_lo="#121419", stat="#8f8cff", line="#7a5cff",
                       grad="#2FA8FF,#9B5CFF"),
@@ -1431,7 +1573,8 @@ def qt_app(mode):
             return t
         d, l = detect_profiles(cfg, usb_devices())  # «авто»: тема по ноутбуку (или доку)
         chosen = {p["id"]: p for p in load_profiles("laptops")}.get(cfg.get("laptop_choice"))
-        return next((p.get("theme") for p in (chosen or l, d) if p and p.get("theme") in THEMES), "thinkpad")
+        l = l or (generic_profile() if not chosen else None)
+        return next((p.get("theme") for p in (chosen or l, d) if p and p.get("theme") in THEMES), brand_of()[1] if brand_of()[1] in THEMES else "generic")
 
     apply_theme(resolve_theme())
     UI_FONT = "Liberation Sans"
@@ -1558,6 +1701,12 @@ def qt_app(mode):
                 q.setPen(QPen(PORT_EDGE, 1)); q.setBrush(QColor("#e8f4ff") if busy else LED_OFF); q.drawEllipse(QPointF(0, 0), 2.6, 2.6)
                 q.restore()
                 return
+            elif kind == "minidp":
+                path.moveTo(-12, -6); path.lineTo(12, -6); path.lineTo(12, 6); path.lineTo(-8, 6); path.lineTo(-12, 2); path.closeSubpath()
+                inner.addRect(QRectF(-8, -2.5, 16, 2.5))
+            elif kind == "microhdmi":
+                path.moveTo(-9, -4); path.lineTo(9, -4); path.lineTo(9, 1.5); path.lineTo(6, 4); path.lineTo(-6, 4); path.lineTo(-9, 1.5)
+                path.closeSubpath(); inner.addRect(QRectF(-6, -1.5, 12, 2))
             elif kind == "sdslot":  # тонкий слот карты памяти
                 path.addRoundedRect(QRectF(-16, -2.5, 32, 5), 2, 2); inner.addRect(QRectF(-12, -0.8, 24, 1.6))
             elif kind == "sidedock":  # длинный боковой разъём дока (HP) — вытянут вдоль боковины
@@ -2252,11 +2401,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     load_plugins()
     extra = {k: v for m in PLUGINS for k, v in getattr(m, "CLI", {}).items()}
-    ap.add_argument("mode", nargs="?", default="app", choices=["app", "tray", "gui", "tui", "calibrate", "dump", "json", *extra])
+    ap.add_argument("mode", nargs="?", default="app", choices=["app", "tray", "gui", "tui", "calibrate", "dump", "json", "make-profile", *extra])
     ap.add_argument("--lang", choices=LANGS)
     a = ap.parse_args()
     LANG = detect_lang(load_config(), a.lang)
-    {"tui": tui, "calibrate": calibrate, "dump": dump, "json": dump_json, **extra}.get(a.mode, lambda: qt_app(a.mode))()
+    {"tui": tui, "calibrate": calibrate, "dump": dump, "json": dump_json, "make-profile": make_profile, **extra}.get(a.mode, lambda: qt_app(a.mode))()
 
 
 if __name__ == "__main__":
