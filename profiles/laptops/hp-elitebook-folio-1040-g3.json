@@ -31,11 +31,11 @@
     {
       "id": "left",
       "row": 1,
-      "w": 0.5,
+      "w": 0.58,
       "height": 62,
       "vents": [
-        0.12,
-        0.42
+        0.05,
+        0.38
       ],
       "title": {
         "uk": "EliteBook Folio 1040 G3 · лівий бік",
@@ -46,7 +46,7 @@
     {
       "id": "right",
       "row": 1,
-      "w": 0.5,
+      "w": 0.42,
       "height": 62,
       "title": {
         "uk": "правий бік",
@@ -57,18 +57,10 @@
   ],
   "ports": [
     {
-      "id": "l_lock",
-      "kind": "lock",
-      "g": "left",
-      "x": 0.05,
-      "mark": "🔒",
-      "label": "Lock"
-    },
-    {
       "id": "l_usb",
       "kind": "usb",
       "g": "left",
-      "x": 0.55,
+      "x": 0.5,
       "mark": "SS",
       "label": "USB"
     },
@@ -76,7 +68,7 @@
       "id": "l_audio",
       "kind": "audio",
       "g": "left",
-      "x": 0.68,
+      "x": 0.63,
       "mark": "🎧",
       "label": "@audio",
       "role": "jack"
@@ -85,7 +77,7 @@
       "id": "l_sc",
       "kind": "smartcard",
       "g": "left",
-      "x": 0.86,
+      "x": 0.84,
       "mark": "SC",
       "label": "Smart Card"
     },
@@ -93,7 +85,7 @@
       "id": "r_sd",
       "kind": "sdslot",
       "g": "right",
-      "x": 0.33,
+      "x": 0.083,
       "mark": "SD",
       "label": "@card",
       "role": "card"
@@ -102,7 +94,7 @@
       "id": "r_usbc",
       "kind": "usbc",
       "g": "right",
-      "x": 0.44,
+      "x": 0.25,
       "mark": "⇆",
       "label": "USB-C"
     },
@@ -110,7 +102,7 @@
       "id": "r_usb",
       "kind": "usb",
       "g": "right",
-      "x": 0.55,
+      "x": 0.417,
       "mark": "SS⚡",
       "label": "USB ⚡"
     },
@@ -118,7 +110,7 @@
       "id": "r_hdmi",
       "kind": "hdmi",
       "g": "right",
-      "x": 0.66,
+      "x": 0.583,
       "mark": "HDMI",
       "label": "HDMI",
       "video": true,
@@ -130,7 +122,7 @@
       "id": "r_dock",
       "kind": "sidedock",
       "g": "right",
-      "x": 0.81,
+      "x": 0.75,
       "mark": "⇆",
       "label": "@dock",
       "role": "dock"
@@ -139,7 +131,7 @@
       "id": "r_power",
       "kind": "barrel_dot",
       "g": "right",
-      "x": 0.95,
+      "x": 0.917,
       "mark": "⎓",
       "label": "@power",
       "role": "power"

@@ -1430,7 +1430,7 @@ def qt_app(mode):
             elif kind == "sidedock":  # длинный боковой разъём дока (HP) — вытянут вдоль боковины
                 path.addRoundedRect(QRectF(-34, -6, 68, 12), 3, 3); inner.addRect(QRectF(-30, -1.6, 60, 3.2))
             elif kind == "smartcard":
-                path.addRoundedRect(QRectF(-30, -2.5, 60, 5), 2, 2); inner.addRect(QRectF(-26, -0.8, 52, 1.6))
+                path.addRoundedRect(QRectF(-44, -2.8, 88, 5.6), 2, 2); inner.addRect(QRectF(-40, -0.8, 80, 1.6))
             elif kind == "sim":
                 path.addRoundedRect(QRectF(-2.5, -11, 5, 22), 2, 2); inner.addEllipse(QPointF(0, 7), 1, 1)
             elif kind == "lock":  # замок Kensington
