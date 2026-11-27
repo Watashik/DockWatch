@@ -1,0 +1,28 @@
+{
+  "id": "acer-nitro-v15-anv15-51",
+  "name": "Acer Nitro V 15 (ANV15-51)",
+  "match": {"dmi": ["Nitro ANV15-51", "ANV15-51"]},
+  "theme": "nitro",
+  "brand": "NITRO",
+  "footer": "Acer Nitro V 15",
+  "keys": {"spk": "🔇", "mic": "🎙", "kbd": "⌨"},
+  "note": "Layout from photos. USB bindings: run `dockwatch calibrate` once.",
+  "groups": [
+    {"id": "bezel", "row": -1, "w": 1.0, "height": 56, "bezel": true,
+     "title": {"uk": "Nitro · рамка екрана", "ru": "Nitro · рамка экрана", "en": "Nitro · display bezel"}},
+    {"id": "left", "row": 1, "w": 0.58, "height": 62,
+     "title": {"uk": "Acer Nitro V 15 · лівий бік", "ru": "Acer Nitro V 15 · левый бок", "en": "Acer Nitro V 15 · left side"}},
+    {"id": "right", "row": 1, "w": 0.42, "height": 62, "vents": [0.36, 0.95],
+     "title": {"uk": "правий бік", "ru": "правый бок", "en": "right side"}}
+  ],
+  "ports": [
+    {"id": "l_power", "kind": "barrel", "g": "left", "x": 0.07, "mark": "⎓", "label": "@power", "role": "power"},
+    {"id": "l_eth", "kind": "rj45", "g": "left", "x": 0.24, "mark": "⊞", "label": "LAN", "role": "eth"},
+    {"id": "l_hdmi", "kind": "hdmi", "g": "left", "x": 0.40, "mark": "HDMI", "label": "HDMI", "video": true, "drm": ["HDMI-A-1"]},
+    {"id": "l_usb1", "kind": "usb", "g": "left", "x": 0.56, "mark": "SS", "label": "USB 1"},
+    {"id": "l_usb2", "kind": "usb", "g": "left", "x": 0.71, "mark": "SS", "label": "USB 2"},
+    {"id": "l_usbc", "kind": "usbc", "g": "left", "x": 0.87, "mark": "⚡TB4", "label": "USB-C ⚡"},
+    {"id": "r_audio", "kind": "audio", "g": "right", "x": 0.10, "mark": "🎧", "label": "@audio", "role": "jack"},
+    {"id": "r_usb", "kind": "usb", "g": "right", "x": 0.24, "mark": "SS", "label": "USB"}
+  ]
+}

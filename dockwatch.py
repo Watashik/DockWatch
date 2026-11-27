@@ -161,6 +161,7 @@ TR = {
                    "en": "Devices are recognised by serial number. Empty name — factory name."},
     "theme_thinkpad": {"uk": "ThinkPad (чорна)", "ru": "ThinkPad (чёрная)", "en": "ThinkPad (black)"},
     "theme_ibm": {"uk": "IBM (червоний, синій, зелений)", "ru": "IBM (красный, синий, зелёный)", "en": "IBM (red, blue, green)"},
+    "theme_nitro": {"uk": "Acer Nitro (чорна, блакитно-фіолетова)", "ru": "Acer Nitro (чёрная, сине-фиолетовая)", "en": "Acer Nitro (black, blue-violet)"},
     "theme_hp": {"uk": "HP (алюміній, блакитний)", "ru": "HP (алюминий, голубой)", "en": "HP (aluminium, blue)"},
     "theme_auto": {"uk": "Авто (за ноутбуком)", "ru": "Авто (по ноутбуку)", "en": "Auto (by laptop)"},
     "theme_light": {"uk": "Світла", "ru": "Светлая", "en": "Light"},
@@ -905,6 +906,24 @@ def os_info():
             "logo": logo, "logo_path": path, "kernel": os.uname().release, "desktop": de}
 
 
+_NV = {"t": 0, "temp": None}
+
+
+def nvidia_temp():
+    import shutil
+    if not shutil.which("nvidia-smi"):
+        return None
+    if time.monotonic() - _NV["t"] > 5:
+        _NV["t"] = time.monotonic()
+        try:
+            out = subprocess.run(["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"],
+                                 capture_output=True, text=True, timeout=3).stdout.strip().splitlines()
+            _NV["temp"] = float(out[0]) if out and out[0].replace(".", "").isdigit() else None
+        except (OSError, subprocess.SubprocessError, ValueError):
+            _NV["temp"] = None
+    return _NV["temp"]
+
+
 def sensors():
     """Температуры (CPU, GPU, SSD) и обороты вентиляторов из hwmon — без root."""
     temps, fans = {}, []
@@ -928,6 +947,9 @@ def sensors():
             v = rd(f)
             if v.isdigit():
                 fans.append(int(v))
+    nv = nvidia_temp()
+    if nv is not None:
+        temps["GPU" if "GPU" not in temps else "dGPU"] = nv
     return {"temps": temps, "fans": fans}
 
 
@@ -1363,6 +1385,9 @@ def qt_app(mode):
         "ibm": dict(red="#E2231A", body="#1c1e22", edge="#2d3036", hole="#070708", metal="#8e9196", ink="#6d7078",
                     txt="#e8eaee", dim="#7d818a", bg="#101215", body_hi="#24272c", body_lo="#16181c", stat="#6f9fe0", line="#1F70C1",
                     blue="#1F70C1", green="#2EA44F"),
+        "nitro": dict(red="#2FA8FF", body="#17191f", edge="#272b33", hole="#06070a", metal="#7d828c", ink="#5d636e",
+                      txt="#e9ecf2", dim="#7f8590", bg="#0c0d11", body_hi="#1f2229", body_lo="#121419", stat="#8f8cff", line="#7a5cff",
+                      grad="#2FA8FF,#9B5CFF"),
         "hp": dict(red="#0096D6", body="#b9bcc0", edge="#8e9196", hole="#141518", metal="#6c6f73", ink="#5c5f63",
                    txt="#eef1f4", dim="#8d939b", bg="#16191d", body_hi="#d6d8db", body_lo="#9a9da1", stat="#5fb7e6", line="#0096D6",
                    port_edge="#5a5d61", pin="#2c2e31", key="#1d2025", key_edge="#33373d", led_on="#ffffff", lens="#0d0e10"),
@@ -1384,7 +1409,8 @@ def qt_app(mode):
         nonlocal PORT_EDGE, PIN, KEYC, KEY_EDGE, LED_OFF, LENS, LED_ON
         base = dict(port_edge="#3a3a3d", pin="#2a2a2c", key="#0f0f10", key_edge="#2e2e30", led_off="#333333", lens="#0b0b0c",
                     led_on="#f4f4f4")
-        t = {k: QColor(v) for k, v in {**base, **THEMES.get(name, THEMES["thinkpad"])}.items()}
+        t = {k: QColor(v) for k, v in {**base, **THEMES.get(name, THEMES["thinkpad"])}.items() if k != "grad"}
+        THEME["grad"] = THEMES.get(name, {}).get("grad", "")
         PORT_EDGE, PIN, KEYC, KEY_EDGE, LED_OFF, LENS = t["port_edge"], t["pin"], t["key"], t["key_edge"], t["led_off"], t["lens"]
         LED_ON = t["led_on"]
         RED, BODY, EDGE, HOLE, METAL, INK = t["red"], t["body"], t["edge"], t["hole"], t["metal"], t["ink"]
@@ -1593,6 +1619,15 @@ def qt_app(mode):
             return cx
 
         def brand_logo(self, q, x, y, size, text):
+            if THEME.get("grad"):
+                c1, c2 = (QColor(c) for c in THEME["grad"].split(","))
+                f = QFont("Liberation Sans"); f.setPixelSize(int(size * 1.05)); f.setBold(True); f.setItalic(True)
+                f.setLetterSpacing(QFont.AbsoluteSpacing, size * 0.12); f.setStretch(120)
+                w = QFontMetricsF(f).horizontalAdvance(text)
+                path = QPainterPath(); path.addText(QPointF(x, y - 4), f, text)
+                g = QLinearGradient(QPointF(x, 0), QPointF(x + w, 0)); g.setColorAt(0, c1); g.setColorAt(1, c2)
+                q.setPen(Qt.NoPen); q.setBrush(QBrush(g)); q.drawPath(path)
+                return x + w
             """Надпись бренда для не-ThinkPad (напр. EliteBook): тонкий шрифт с разрядкой и акцентная черта."""
             f = QFont("Liberation Sans"); f.setPixelSize(int(size * 0.95)); f.setLetterSpacing(QFont.AbsoluteSpacing, size * 0.06)
             f.setWeight(QFont.Light)
