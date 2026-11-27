@@ -1829,6 +1829,8 @@ def qt_app(mode):
             """Надпись бренда для не-ThinkPad (напр. EliteBook): тонкий шрифт с разрядкой и акцентная черта."""
             f = QFont("Liberation Sans"); f.setPixelSize(int(size * 0.95)); f.setLetterSpacing(QFont.AbsoluteSpacing, size * 0.06)
             f.setWeight(QFont.Light)
+            while QFontMetricsF(f).horizontalAdvance(text) > 165 and f.pixelSize() > 14:  # длинное название — мельче
+                f.setPixelSize(f.pixelSize() - 1); f.setLetterSpacing(QFont.AbsoluteSpacing, f.pixelSize() * 0.04)
             q.setFont(f); q.setPen(TXT); q.drawText(QPointF(x, y - 4), text)
             w = QFontMetricsF(f).horizontalAdvance(text)
             q.setPen(Qt.NoPen); q.setBrush(RED); q.drawRect(QRectF(x, y + 2, w * 0.28, 2.5))
@@ -1879,8 +1881,8 @@ def qt_app(mode):
                 x = x0
                 while x < x1 - 10:
                     q.drawRoundedRect(QRectF(x, r.center().y() - 12, 10, 24), 2, 2); x += 19
-                lines = sensors_lines(sn)
-                if lines:  # подпись под решёткой, сама решётка остаётся открытой
+                lines = sensors_lines(sn) if g["id"] == self.sensor_group else []
+                if lines:  # подпись под решёткой (только под одной из решёток), сама решётка остаётся открытой
                     f = font(11)
                     fm = QFontMetricsF(f)
                     q.setFont(f)
@@ -1995,6 +1997,8 @@ def qt_app(mode):
             # bodies, row by row
             self.rects = {}
             self.grects = {}
+            vg = [g["id"] for g in self.s["groups"] if g.get("vents")]
+            self.sensor_group = vg[-1] if vg else None
             y = 98
             # корпуса во всю ширину, но тонкие (по высоте — впритык к разъёмам); на широком окне разъёмы крупнее
             CW, off = W, 0.0
