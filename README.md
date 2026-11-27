@@ -81,6 +81,8 @@ NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-l
 | Dock (draft) | Dell WD19 | `profiles/docks/dell-wd19.json` |
 | Dock | HP UltraSlim Docking Station (2013) — choose in the menu | `profiles/docks/hp-ultraslim-dock-2013.json` |
 | Laptop | Acer Nitro V 15 (ANV15-51) | `profiles/laptops/acer-nitro-v15-anv15-51.json` |
+| Laptop | Lenovo IdeaPad Gaming 3 15ACH6 | `profiles/laptops/lenovo-ideapad-gaming-3-15ach6.json` |
+| Laptop | Pixus Rise | `profiles/laptops/pixus-rise.json` |
 | Laptop | HP EliteBook Folio 1040 G3 | `profiles/laptops/hp-elitebook-folio-1040-g3.json` |
 | Laptop | Lenovo ThinkPad L14 Gen 1 | `profiles/laptops/lenovo-thinkpad-l14-gen1.json` |
 
