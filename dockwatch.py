@@ -175,6 +175,16 @@ TR = {
     "kbd_off": {"uk": "вимкнена", "ru": "выключена", "en": "off"},
     "dock_audio_out": {"uk": "🎧 звук іде через док", "ru": "🎧 звук идёт через док", "en": "🎧 sound goes through the dock"},
     "playing": {"uk": "грає", "ru": "играет", "en": "playing"},
+    "m_edit": {"uk": "✏️ Редагувати схему", "ru": "✏️ Редактировать схему", "en": "✏️ Edit layout"},
+    "m_edit_done": {"uk": "✔ Готово (зберегти схему)", "ru": "✔ Готово (сохранить схему)", "en": "✔ Done (save layout)"},
+    "m_edit_reset": {"uk": "↺ Скинути мої зміни схеми", "ru": "↺ Сбросить мои изменения схемы", "en": "↺ Reset my layout changes"},
+    "edit_hint": {"uk": "Режим редагування: тягніть порти мишею (і між боками) · ПКМ по порту — тип, назва, видалити · ПКМ по корпусу — додати порт",
+                  "ru": "Режим редактирования: тяните порты мышью (и между боками) · ПКМ по порту — тип, название, удалить · ПКМ по корпусу — добавить порт",
+                  "en": "Edit mode: drag ports (also between sides) · right-click a port — type, name, delete · right-click a side — add a port"},
+    "e_kind": {"uk": "Тип роз'єму", "ru": "Тип разъёма", "en": "Connector type"},
+    "e_add": {"uk": "➕ Додати порт", "ru": "➕ Добавить порт", "en": "➕ Add port"},
+    "e_del": {"uk": "🗑 Видалити порт", "ru": "🗑 Удалить порт", "en": "🗑 Delete port"},
+    "e_label": {"uk": "Назва порту:", "ru": "Название порта:", "en": "Port name:"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
@@ -248,15 +258,34 @@ def save_config(cfg):
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 
+USER_PROFILES = os.path.join(CONFIG_DIR, "profiles")
+
+
 def load_profiles(kind):
-    out = []
-    for f in sorted(glob.glob(os.path.join(PROFILES, kind, "*.json"))):
-        try:
-            with open(f) as fh:
-                out.append(json.load(fh))
-        except (OSError, ValueError) as e:
-            print(f"profile {f}: {e}", file=sys.stderr)
-    return out
+    """Встроенные профили + свои из ~/.config/dockwatch/profiles (правки схемы); свой с тем же id важнее."""
+    byid = {}
+    for d in (os.path.join(PROFILES, kind), os.path.join(USER_PROFILES, kind)):
+        for f in sorted(glob.glob(os.path.join(d, "*.json"))):
+            try:
+                with open(f) as fh:
+                    p = json.load(fh)
+                if d.startswith(USER_PROFILES):
+                    p["user"] = True
+                byid[p.get("id", f)] = p
+            except (OSError, ValueError) as e:
+                print(f"profile {f}: {e}", file=sys.stderr)
+    return list(byid.values())
+
+
+def save_user_profile(kind, prof):
+    """Сохранить профиль как свой. Автосхема становится постоянным профилем этого ноутбука (по DMI)."""
+    p = {k: v for k, v in prof.items() if k not in ("user", "auto")}
+    if prof.get("auto") or p.get("id") == "auto":
+        p["id"] = "user-" + (re.sub(r"[^a-z0-9]+", "-", p.get("name", "laptop").lower()).strip("-") or "laptop")
+    os.makedirs(os.path.join(USER_PROFILES, kind), exist_ok=True)
+    with open(os.path.join(USER_PROFILES, kind, p["id"] + ".json"), "w") as f:
+        json.dump(p, f, ensure_ascii=False, indent=2)
+    return p["id"]
 
 
 def usb_devices():
@@ -346,6 +375,10 @@ def generic_profile():
                 continue
             peer = peer_of(name)
             seen.update({name, peer} - {None})
+            if peer:
+                pb, pn = peer.split("-")
+                if rd(f"/sys/bus/usb/devices/usb{pb}/{pb}-0:1.0/usb{pb}-port{pn}/connect_type") in ("hardwired", "not used"):
+                    continue  # напарник — внутреннее подключение, это не разъём на корпусе
             panel = rd(f"{pdir}/physical_location/panel")
             typec = os.path.exists(f"{pdir}/connector") or (peer and os.path.exists(
                 f"/sys/bus/usb/devices/usb{peer.split('-')[0]}/{peer.split('-')[0]}-0:1.0/usb{peer.split('-')[0]}-port{peer.split('-')[1]}/connector"))
@@ -1619,6 +1652,9 @@ def qt_app(mode):
             self.scale = 1.0
             self.logos = {n: asset(f"{n}.png") for n in ("thinkpad", "ibm", "lenovo")}
             self.hist = {}
+            self.editing = False
+            self.drag = None
+            self.grects = {}
             self.lit = {}        # pid -> когда порт загорелся (для плавного зажигания)
             self.fan_angle = 0.0
             self.anim_t = time.monotonic()
@@ -1626,6 +1662,8 @@ def qt_app(mode):
             self.setMouseTracking(True)
 
         def update_state(self, s, events):
+            if self.editing:
+                return
             self.s = s
             from collections import deque
             for pid, pt in s["ports"].items():
@@ -1955,6 +1993,7 @@ def qt_app(mode):
                 self.header_media(q, left, W / 2, 38, min(W - 2 * (left + 130), 2 * (W - 300 - W / 2)))
             # bodies, row by row
             self.rects = {}
+            self.grects = {}
             y = 98
             # корпуса во всю ширину, но тонкие (по высоте — впритык к разъёмам); на широком окне разъёмы крупнее
             CW, off = W, 0.0
@@ -1970,6 +2009,7 @@ def qt_app(mode):
                     gw = avail * g.get("w", 1.0) / max(1.0, wsum)  # несколько профилей в одном ряду — делим ширину
                     q.setFont(font(13, italic=True)); q.setPen(DIM); q.drawText(QPointF(x + 4, y + 12), g["title"])
                     r = QRectF(x, y + 20, gw, h)
+                    self.grects[g["id"]] = (r, g.get("owner"))
                     self.body(q, r, g)
                     for pt in self.s["ports"].values():
                         if pt["g"] != g["id"]:
@@ -1992,6 +2032,12 @@ def qt_app(mode):
                     x += gw + gap
                 y += h + (34 if all(g.get("bezel") for g in row) else
                           64 if self.s["show_stats"] or any(g.get("vents") for g in row) else 52)
+            if self.editing:  # подсказка и пунктир вокруг корпусов
+                q.setPen(QPen(RED, 1.2, Qt.DashLine)); q.setBrush(Qt.NoBrush)
+                for r, _ in self.grects.values():
+                    q.drawRoundedRect(r.adjusted(-4, -4, 4, 4), 9, 9)
+                q.setFont(font(12, italic=True)); q.setPen(RED)
+                q.drawText(QRectF(24, y - 30, W - 48, 18), Qt.AlignLeft, tr("edit_hint"))
             # connected / events — в той же центральной колонке, что и схема
             q.save(); q.translate(off, 0); W_full, W = W, CW
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(28, y + 6), tr("connected"))
@@ -2071,6 +2117,47 @@ def qt_app(mode):
             m = QMenu(self)
             pos = e.pos() / self.scale
             hit = next((k for k, r in self.rects.items() if r.contains(pos)), None)
+            if self.editing:
+                if hit:
+                    pt = self.s["ports"][hit]
+                    m.addSection(pt["label"] or hit)
+                    sub = m.addMenu(tr("e_kind"))
+                    for k in self.KINDS_EDIT:
+                        a = sub.addAction(k); a.setCheckable(True); a.setChecked(k == pt["kind"])
+                        a.triggered.connect(lambda _=False, k_=k: self.edit_port(hit, kind=k_))
+
+                    def ren():
+                        t, ok = QInputDialog.getText(self, "dockwatch", tr("e_label"), text=pt["label"])
+                        if ok:
+                            self.edit_port(hit, label=t.strip() or pt["label"])
+                    m.addAction(tr("rename_port"), ren)
+
+                    def delete():
+                        prof = self.edit_prof(pt["owner"])
+                        prof["ports"] = [p_ for p_ in prof.get("ports", []) if p_["id"] != hit]
+                        self.edit_save(pt["owner"]); self.s["ports"].pop(hit, None); self.rects.pop(hit, None); self.update()
+                    m.addAction(tr("e_del"), delete)
+                else:
+                    gid = self.group_at(pos)
+                    if gid:
+                        r, owner = self.grects[gid]
+                        x = round(min(0.98, max(0.02, (pos.x() - r.left()) / r.width())), 3)
+                        sub = m.addMenu(tr("e_add"))
+                        for k in self.KINDS_EDIT:
+                            def add(_=False, k_=k):
+                                prof = self.edit_prof(owner)
+                                ids = {p_["id"] for p_ in prof.get("ports", [])}
+                                n = 1
+                                while f"{k_}_{n}" in ids:
+                                    n += 1
+                                prof.setdefault("ports", []).append({"id": f"{k_}_{n}", "kind": k_, "g": gid, "x": x, "mark": "",
+                                                                      "label": k_.upper() if len(k_) <= 4 else k_})
+                                self.edit_save(owner); self.s = snapshot(); self.update()
+                            sub.addAction(k, add)
+                m.addSeparator()
+                m.addAction(tr("m_edit_done"), lambda: toggle_edit(False))
+                m.exec(e.globalPos())
+                return
             disks = list(dict.fromkeys(self.s["ports"][hit]["disks"])) if hit else []
             if hit:
                 pt = self.s["ports"][hit]
@@ -2085,8 +2172,68 @@ def qt_app(mode):
             populate(m, in_window=True)
             m.exec(e.globalPos())
 
+        # ---------- редактор схемы
+        KINDS_EDIT = ["usb", "usbc", "hdmi", "dp", "minidp", "microhdmi", "vga", "rj45", "audio", "barrel", "dc",
+                      "sdslot", "card", "smartcard", "sim", "dockport", "sidedock", "led"]
+
+        def edit_prof(self, owner):
+            return self.s["laptop"] if owner == "laptop" else self.s["dock"]
+
+        def edit_save(self, owner):
+            kind = "laptops" if owner == "laptop" else "docks"
+            prof = self.edit_prof(owner)
+            if not prof:
+                return
+            was_auto = bool(prof.get("auto"))
+            new_id = save_user_profile(kind, prof)
+            c = load_config()
+            key = "laptop_choice" if owner == "laptop" else "dock_choice"
+            if was_auto or c.get(key) not in ("auto", None, ""):  # автосхема стала своим профилем — выбираем его
+                c[key] = new_id
+                save_config(c)
+            prof["id"] = new_id
+            prof.pop("auto", None)
+            prof["user"] = True
+
+        def group_at(self, pos):
+            return next((gid for gid, (r, _) in self.grects.items() if r.adjusted(-6, -24, 6, 24).contains(pos)), None)
+
+        def mousePressEvent(self, e):
+            if not self.editing or e.button() != Qt.LeftButton:
+                return
+            pos = e.position() / self.scale
+            self.drag = next((k for k, r in self.rects.items() if r.contains(pos)), None)
+
+        def mouseReleaseEvent(self, e):
+            if self.editing and getattr(self, "drag", None):
+                owner = self.s["ports"][self.drag]["owner"]
+                self.drag = None
+                self.edit_save(owner)
+
+        def edit_port(self, pid, **kw):
+            pt = self.s["ports"][pid]
+            prof = self.edit_prof(pt["owner"])
+            for p_ in prof.get("ports", []):
+                if p_["id"] == pid:
+                    p_.update(kw)
+            pt.update({k: v for k, v in kw.items()})
+            self.edit_save(pt["owner"])
+            self.update()
+
         def mouseMoveEvent(self, e):
             pos = e.position() / self.scale
+            if self.editing and getattr(self, "drag", None):
+                pt = self.s["ports"][self.drag]
+                gid = self.group_at(pos) or pt["g"]
+                r, owner = self.grects.get(gid, (None, None))
+                if r is not None and owner == pt["owner"]:
+                    x = round(min(0.98, max(0.02, (pos.x() - r.left()) / r.width())), 3)
+                    for p_ in self.edit_prof(owner).get("ports", []):
+                        if p_["id"] == self.drag:
+                            p_.update(g=gid, x=x)
+                    pt.update(g=gid, x=x)
+                    self.update()
+                return
             hit = next((k for k, r in self.rects.items() if r.contains(pos)), None)
             if hit:
                 pt = self.s["ports"][hit]
@@ -2227,6 +2374,29 @@ def qt_app(mode):
         view.bg = None
         apply(lang=lang.currentData())
 
+    def toggle_edit(on):
+        view.editing = on
+        if on:
+            view.show(); view.raise_()
+        else:
+            state["prev"] = None
+            tick()
+        view.update()
+
+    def reset_edits():
+        for owner, kind in (("laptop", "laptops"), ("dock", "docks")):
+            p_ = view.s.get(owner)
+            if p_ and p_.get("user"):
+                f = os.path.join(USER_PROFILES, kind, p_["id"] + ".json")
+                if os.path.exists(f):
+                    os.remove(f)
+                c = load_config()
+                key = "laptop_choice" if owner == "laptop" else "dock_choice"
+                if c.get(key) == p_["id"]:
+                    c[key] = "auto"; save_config(c)
+        state["prev"] = None
+        tick()
+
     def do_eject(label, disks):
         err = next((e for e in (eject_disk(d) for d in disks) if e), "")
         notify(tr("eject_fail", x=label, e=err) if err else tr("ejected", x=label))
@@ -2279,6 +2449,9 @@ def qt_app(mode):
         if not in_window:
             menu.addAction(tr("m_show"), lambda: (view.show(), view.raise_(), view.activateWindow()))
         menu.addAction(tr("m_settings"), settings)
+        menu.addAction(tr("m_edit_done") if view.editing else tr("m_edit"), lambda: toggle_edit(not view.editing))
+        if any(p_ and p_.get("user") for p_ in (view.s.get("laptop"), view.s.get("dock"))):
+            menu.addAction(tr("m_edit_reset"), reset_edits)
         plugin_call("menu", lambda title, fn: menu.addAction(title, fn), ctx)
         menu.addAction(tr("m_tui"), lambda: run_in_terminal("tui"))
         menu.addAction(tr("m_cal"), lambda: run_in_terminal("calibrate"))
