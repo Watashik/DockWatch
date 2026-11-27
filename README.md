@@ -8,6 +8,8 @@ what is plugged into each one, how much power and bandwidth it takes, and pops u
 | IBM theme | Light theme |
 |---|---|
 | ![IBM](docs/theme-ibm.png) | ![Light](docs/theme-light.png) |
+| **HP EliteBook + UltraSlim Dock** | **Acer Nitro V 15** |
+| ![HP](docs/theme-hp.png) | ![Nitro](docs/theme-nitro.png) |
 
 Screenshots in other languages: [українська](docs/screenshot-uk.png) · [русский](docs/screenshot-ru.png)
 
