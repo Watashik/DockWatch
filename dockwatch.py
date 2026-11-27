@@ -417,6 +417,51 @@ def edid_name(raw):
     return "".join(chr(((m >> s) & 31) + 64) for s in (10, 5, 0))
 
 
+def drm_mst_path(card, connector_id):
+    """Свойство PATH коннектора DRM (напр. «mst:3-1» — порт 1 MST-хаба дока). Имена DP-3/DP-4… у MST
+    меняются при каждом подключении, а PATH привязан к физическому разъёму. Нужен доступ к /dev/dri (сеанс)."""
+    import ctypes
+    import fcntl
+
+    def iowr(nr, size):
+        return (3 << 30) | (size << 16) | (ord("d") << 8) | nr
+
+    class ObjProps(ctypes.Structure):
+        _fields_ = [("props", ctypes.c_uint64), ("vals", ctypes.c_uint64), ("count", ctypes.c_uint32),
+                    ("obj_id", ctypes.c_uint32), ("obj_type", ctypes.c_uint32), ("pad", ctypes.c_uint32)]
+
+    class GetProp(ctypes.Structure):
+        _fields_ = [("values", ctypes.c_uint64), ("enums", ctypes.c_uint64), ("prop_id", ctypes.c_uint32),
+                    ("flags", ctypes.c_uint32), ("name", ctypes.c_char * 32), ("cv", ctypes.c_uint32), ("ce", ctypes.c_uint32)]
+
+    class Blob(ctypes.Structure):
+        _fields_ = [("blob_id", ctypes.c_uint32), ("length", ctypes.c_uint32), ("data", ctypes.c_uint64)]
+    try:
+        fd = os.open(f"/dev/dri/{card}", os.O_RDONLY)
+    except OSError:
+        return ""
+    try:
+        op = ObjProps(0, 0, 0, connector_id, 0xC0C0C0C0, 0)
+        fcntl.ioctl(fd, iowr(0xB9, ctypes.sizeof(ObjProps)), op)
+        ids, vals = (ctypes.c_uint32 * op.count)(), (ctypes.c_uint64 * op.count)()
+        op.props, op.vals = ctypes.addressof(ids), ctypes.addressof(vals)
+        fcntl.ioctl(fd, iowr(0xB9, ctypes.sizeof(ObjProps)), op)
+        for pid, v in zip(ids, vals):
+            gp = GetProp(); gp.prop_id = pid
+            fcntl.ioctl(fd, iowr(0xAA, ctypes.sizeof(GetProp)), gp)
+            if gp.name == b"PATH" and v:
+                b = Blob(v, 0, 0)
+                fcntl.ioctl(fd, iowr(0xAC, ctypes.sizeof(Blob)), b)
+                buf = ctypes.create_string_buffer(b.length); b.data = ctypes.addressof(buf)
+                fcntl.ioctl(fd, iowr(0xAC, ctypes.sizeof(Blob)), b)
+                return buf.raw.rstrip(b"\0").decode()
+    except OSError:
+        return ""
+    finally:
+        os.close(fd)
+    return ""
+
+
 def video_outputs():
     out = {}
     for p in sorted(glob.glob("/sys/class/drm/card*-*")):
@@ -429,8 +474,13 @@ def video_outputs():
         except OSError:
             raw = b""
         modes = rd(f"{p}/modes").splitlines()
-        out[conn] = {"conn": conn, "connected": rd(f"{p}/status") == "connected", "monitor": edid_name(raw),
-                     "mode": modes[0] if modes else "", "edid": len(raw)}
+        connected = rd(f"{p}/status") == "connected"
+        path = ""
+        if connected and rd(f"{p}/connector_id").isdigit():
+            path = drm_mst_path(os.path.basename(p).split("-")[0], int(rd(f"{p}/connector_id")))
+        out[conn] = {"conn": conn, "connected": connected, "monitor": edid_name(raw),
+                     "mode": modes[0] if modes else "", "edid": len(raw),
+                     "mst": ("mst:" + path.rsplit("-", 1)[-1]) if path.startswith("mst:") else ""}
     return out
 
 
@@ -967,8 +1017,10 @@ def snapshot(cfg=None):
         if not v["connected"]:
             continue
         item = f"🖥 {v['monitor'] or tr('monitor')} · {v['mode']}" + ("" if v["edid"] else f" · {tr('no_edid')}")
-        pid = cfg["video"].get(v["conn"]) or drm_default.get(v["conn"]) or \
-            {**(laptop or {}).get("video", {}), **(dock or {}).get("video", {})}.get(v["conn"])
+        vmap = {**(laptop or {}).get("video", {}), **(dock or {}).get("video", {}), **cfg["video"]}
+        # MST (видео через хаб дока): по номеру порта хаба — он не меняется, в отличие от DP-3/DP-4…
+        pid = (vmap.get(v["mst"]) if v["mst"] else None) or \
+            (None if v["mst"] else cfg["video"].get(v["conn"])) or drm_default.get(v["conn"]) or vmap.get(v["conn"])
         if pid in ports:
             put(pid, item)
         else:
@@ -1195,8 +1247,9 @@ def calibrate():
         if not ans or not conn:
             break
         if ans in vids:
+            outs = video_outputs()
             for c in conn:
-                cfg["video"][c] = ans
+                cfg["video"][outs[c]["mst"] or c] = ans
             print("  ✔", ", ".join(conn), "→", ans)
     save_config(cfg)
     print(tr("cal_saved", f=CONFIG))

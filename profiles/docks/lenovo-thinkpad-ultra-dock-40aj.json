@@ -164,6 +164,9 @@
     "dock3.1": "usbc1"
   },
   "video": {
-    "DP-1": "vga"
+    "DP-1": "vga",
+    "mst:1": "hdmi",
+    "mst:2": "dp1",
+    "mst:3": "dp2"
   }
 }
