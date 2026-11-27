@@ -1492,7 +1492,7 @@ def qt_app(mode):
                 path.addRoundedRect(QRectF(-13, -5, 26, 10), 5, 5); inner.addRoundedRect(QRectF(-8, -1.4, 16, 2.8), 1.4, 1.4)
             elif kind == "dockport":
                 path.addRoundedRect(QRectF(-34, -10, 68, 20), 10, 10)
-                inner.addRect(QRectF(-26, -5, 22, 10)); inner.addRoundedRect(QRectF(2, -4, 22, 8), 4, 4)
+                inner.addRoundedRect(QRectF(-24, -4, 22, 8), 4, 4); inner.addRect(QRectF(4, -5, 22, 10))
             elif kind == "vga":
                 path.moveTo(-26, -10); path.lineTo(26, -10); path.lineTo(21, 10); path.lineTo(-21, 10); path.closeSubpath()
                 for row in (-5, 0, 5):
