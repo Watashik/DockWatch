@@ -29,7 +29,7 @@ Profiles are plain JSON — copy an existing one:
 - `match` — how to detect it: `usb_hubs` (VID:PID of the dock's internal hubs, see `lsusb`) or `dmi` (substring of `/sys/class/dmi/id/product_version`).
 - `groups` — physical sides (rear panel, left/right side); `row` + `w` put several on one line.
 - `ports` — connectors left→right: `kind` (`usb`, `usbc`, `hdmi`, `dp`, `vga`, `rj45`, `audio`, `dc`, `card`, `dockport`),
-  `x` — centre position as a fraction of the side's width, `label`, optional `role` (`power`, `eth`, `dock`) and `drm` (e.g. `["HDMI-A-1"]`).
+  `x` — centre position as a fraction of the side's width, `label`, optional `role` (`power`, `eth`, `dock`), `label_docked` (label while docked — e.g. a USB-C that becomes the dock connector), `typec` (e.g. `port0` for USB-C Power Delivery info) and `drm` (e.g. `["HDMI-A-1"]`).
 
 Then run `dockwatch calibrate` once. Pull requests with new profiles (and a photo of the ports) are welcome.
 

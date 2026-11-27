@@ -510,7 +510,8 @@ def snapshot(cfg=None):
         for g in prof.get("groups", []):
             groups.append(dict(g, owner=where, title=pick(g.get("title", g["id"]))))
         for p in prof.get("ports", []):
-            ports[p["id"]] = dict(p, owner=where, label=cfg["labels"].get(p["id"]) or pick(p.get("label", p["id"])),
+            lab = p.get("label_docked") if docked and p.get("label_docked") else p.get("label", p["id"])
+            ports[p["id"]] = dict(p, owner=where, label=cfg["labels"].get(p["id"]) or pick(lab),
                                   busy=False, items=[], stats=[])
     loose, loose_stats = [], []
     show = cfg.get("show_stats", True)

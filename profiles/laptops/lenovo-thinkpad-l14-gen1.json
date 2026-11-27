@@ -78,9 +78,10 @@
       "g": "left",
       "x": 0.73,
       "mark": "⇆",
-      "label": "@dock",
+      "label": "USB-C",
       "role": "dock",
-      "typec": "port0"
+      "typec": "port0",
+      "label_docked": "@dock"
     },
     {
       "id": "l_usbc",
