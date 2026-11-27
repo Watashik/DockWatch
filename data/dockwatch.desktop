@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=DockWatch
+GenericName=Dock port monitor
+GenericName[uk]=Монітор портів дока
+GenericName[ru]=Монитор портов дока
+Comment=Live port map of the docking station and laptop
+Comment[uk]=Жива схема портів док-станції й ноутбука
+Comment[ru]=Живая схема портов док-станции и ноутбука
+Exec=dockwatch
+Icon=dockwatch
+Terminal=false
+Categories=System;Monitor;Utility;
+Keywords=dock;usb;ports;thinkpad;
+StartupWMClass=dockwatch

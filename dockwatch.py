@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """dockwatch — live port map of a docking station and laptop, ThinkPad style.
 
-  dockwatch [tray]     tray icon: click — port map, notifications on plug/unplug (default)
-  dockwatch gui        window with the port map
+  dockwatch            app: window + tray icon; closing the window keeps it in the tray (default)
+  dockwatch tray       start hidden in the tray (for autostart)
+  dockwatch gui        window only, no tray
   dockwatch tui        the same in a terminal (curses); q — quit, c — calibrate
   dockwatch dump       current state as text
   dockwatch calibrate  bind system USB ports to physical connectors (plug a flash drive into each)
@@ -570,9 +571,11 @@ def tui():
 
 
 # ---------------------------------------------------------------- GUI + tray (PySide6), ThinkPad style
-def qt_app(tray_mode):
+def qt_app(mode):
+    tray_mode = mode in ("app", "tray")
     try:
         from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
+        from PySide6.QtNetwork import QLocalServer, QLocalSocket
         from PySide6.QtGui import (QAction, QActionGroup, QBrush, QColor, QFont, QFontMetricsF, QIcon, QLinearGradient,
                                    QPainter, QPainterPath, QPen, QPixmap, QRadialGradient)
         from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
@@ -591,6 +594,8 @@ def qt_app(tray_mode):
     BASE_W = 1100.0  # logical width: bigger windows scale everything up
 
     def asset(name):
+        if os.environ.get("DOCKWATCH_NO_ASSETS"):
+            return None
         pm = QPixmap(os.path.join(HERE, "assets", name))
         return None if pm.isNull() else pm
 
@@ -832,6 +837,18 @@ def qt_app(tray_mode):
     app = QApplication.instance() or QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(not tray_mode)
     app.setApplicationName("dockwatch")
+    app.setDesktopFileName("dockwatch")
+    # одна копия: повторный запуск (иконка, команда в терминале) просто показывает окно уже запущенной
+    sock_name = f"dockwatch-{os.getuid()}"
+    if tray_mode and not os.environ.get("DOCKWATCH_SCREENSHOT"):
+        probe = QLocalSocket()
+        probe.connectToServer(sock_name)
+        if probe.waitForConnected(300):
+            probe.write(b"show" if mode == "app" else b"noop")
+            probe.waitForBytesWritten(300)
+            probe.disconnectFromServer()
+            return
+        QLocalServer.removeServer(sock_name)
     view = DockView()
     state = {"prev": view.s}
     tray, menu_actions = None, {}
@@ -890,6 +907,22 @@ def qt_app(tray_mode):
         tray.show()
     else:
         view.show()
+    if tray_mode:
+        def show_view():
+            view.show(); view.raise_(); view.activateWindow()
+
+        server = QLocalServer(app)
+        server.listen(sock_name)
+
+        def on_conn():
+            c = server.nextPendingConnection()
+            c.waitForReadyRead(300)
+            if bytes(c.readAll()) == b"show":
+                show_view()
+            c.deleteLater()
+        server.newConnection.connect(on_conn)
+        if mode == "app":
+            show_view()
 
     timer = QTimer()
     timer.timeout.connect(tick)
@@ -905,11 +938,11 @@ def qt_app(tray_mode):
 def main():
     global LANG
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", nargs="?", default="tray", choices=["tray", "gui", "tui", "calibrate", "dump"])
+    ap.add_argument("mode", nargs="?", default="app", choices=["app", "tray", "gui", "tui", "calibrate", "dump"])
     ap.add_argument("--lang", choices=LANGS)
     a = ap.parse_args()
     LANG = detect_lang(load_config(), a.lang)
-    {"tui": tui, "calibrate": calibrate, "dump": dump}.get(a.mode, lambda: qt_app(a.mode == "tray"))()
+    {"tui": tui, "calibrate": calibrate, "dump": dump}.get(a.mode, lambda: qt_app(a.mode))()
 
 
 if __name__ == "__main__":
