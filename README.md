@@ -54,6 +54,14 @@ sudo ./install-root.sh     # optional: allow blinking the ThinkPad lid dot
 ```
 Arch/CachyOS: an AUR `PKGBUILD` is in `packaging/aur/`.
 
+Fedora:
+```sh
+sudo dnf install python3-pyside6 pulseaudio-utils udisks2 bluez
+# KDE Plasma: the tray icon and the panel widget work out of the box.
+# GNOME: install the "AppIndicator and KStatusNotifierItem Support" extension for the tray icon.
+```
+On Fedora regular users are not in the `users` group, so for the lid-dot blink also run `sudo usermod -aG users $USER`.
+
 Requirements: Python 3, PySide6 (`sudo pacman -S pyside6`). Optional: udisks2, pactl (PipeWire/PulseAudio),
 NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-level tools are used — no root.
 

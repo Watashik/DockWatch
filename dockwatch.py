@@ -636,6 +636,17 @@ def chime(kind="in"):
             continue
 
 
+def run_in_terminal(*args):
+    """Открыть команду в терминале: Konsole, GNOME Terminal/Console, Ptyxis (Fedora), xterm…"""
+    import shutil
+    cmd = [sys.executable, os.path.abspath(__file__), *args]
+    for term, pre in (("konsole", ["-e"]), ("ptyxis", ["--"]), ("gnome-terminal", ["--"]), ("kgx", ["--"]),
+                      ("xfce4-terminal", ["-x"]), ("alacritty", ["-e"]), ("kitty", []), ("foot", []), ("xterm", ["-e"])):
+        if shutil.which(term):
+            subprocess.Popen([term, *pre, *cmd])
+            return
+
+
 HISTORY = os.path.expanduser("~/.local/share/dockwatch/history.log")
 
 
@@ -1837,8 +1848,8 @@ def qt_app(mode):
         if not in_window:
             menu.addAction(tr("m_show"), lambda: (view.show(), view.raise_(), view.activateWindow()))
         menu.addAction(tr("m_settings"), settings)
-        menu.addAction(tr("m_tui"), lambda: subprocess.Popen(["konsole", "-e", sys.executable, me, "tui"]))
-        menu.addAction(tr("m_cal"), lambda: subprocess.Popen(["konsole", "-e", sys.executable, me, "calibrate"]))
+        menu.addAction(tr("m_tui"), lambda: run_in_terminal("tui"))
+        menu.addAction(tr("m_cal"), lambda: run_in_terminal("calibrate"))
         menu.addSeparator()
         for key, opt in (("m_stats", "show_stats"), ("m_hidedock", "hide_dock")):
             a = menu.addAction(tr(key))
