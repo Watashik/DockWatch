@@ -56,9 +56,9 @@
     },
     {
       "id": "bottom",
-      "row": 2,
-      "w": 0.4,
-      "height": 50,
+      "row": 0,
+      "w": 0.16,
+      "height": 62,
       "title": {
         "uk": "низ корпусу",
         "ru": "низ корпуса",
@@ -101,19 +101,44 @@
       "label": "Smart Card"
     },
     {
-      "id": "r_power",
-      "kind": "barrel",
+      "id": "b_dock",
+      "kind": "dockport",
+      "g": "bottom",
+      "x": 0.5,
+      "mark": "⇆",
+      "label": "@dock",
+      "role": "dock"
+    },
+    {
+      "id": "r_sd",
+      "kind": "sdslot",
       "g": "right",
-      "x": 0.08,
-      "mark": "⎓",
-      "label": "@power",
-      "role": "power"
+      "x": 0.12,
+      "mark": "SD",
+      "label": "@card",
+      "role": "card"
+    },
+    {
+      "id": "r_usbc",
+      "kind": "usbc",
+      "g": "right",
+      "x": 0.3,
+      "mark": "⇆",
+      "label": "USB-C"
+    },
+    {
+      "id": "r_usb",
+      "kind": "usb",
+      "g": "right",
+      "x": 0.47,
+      "mark": "SS⚡",
+      "label": "USB ⚡"
     },
     {
       "id": "r_hdmi",
       "kind": "hdmi",
       "g": "right",
-      "x": 0.36,
+      "x": 0.63,
       "mark": "HDMI",
       "label": "HDMI",
       "video": true,
@@ -122,38 +147,13 @@
       ]
     },
     {
-      "id": "r_usb",
-      "kind": "usb",
+      "id": "r_power",
+      "kind": "barrel",
       "g": "right",
-      "x": 0.52,
-      "mark": "SS⚡",
-      "label": "USB ⚡"
-    },
-    {
-      "id": "r_usbc",
-      "kind": "usbc",
-      "g": "right",
-      "x": 0.68,
-      "mark": "⇆",
-      "label": "USB-C"
-    },
-    {
-      "id": "r_sd",
-      "kind": "sdslot",
-      "g": "right",
-      "x": 0.86,
-      "mark": "SD",
-      "label": "@card",
-      "role": "card"
-    },
-    {
-      "id": "b_dock",
-      "kind": "dockport",
-      "g": "bottom",
-      "x": 0.5,
-      "mark": "⇆",
-      "label": "@dock",
-      "role": "dock"
+      "x": 0.91,
+      "mark": "⎓",
+      "label": "@power",
+      "role": "power"
     }
   ]
 }

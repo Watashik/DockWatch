@@ -1672,8 +1672,9 @@ def qt_app(mode):
                 gap = 14
                 avail = CW - 48 - tower_w - gap * (len(row) - 1)
                 x = off + 24.0
+                wsum = sum(g.get("w", 1.0) for g in row)
                 for g in row:
-                    gw = avail * g.get("w", 1.0)
+                    gw = avail * g.get("w", 1.0) / max(1.0, wsum)  # несколько профилей в одном ряду — делим ширину
                     q.setFont(font(13, italic=True)); q.setPen(DIM); q.drawText(QPointF(x + 4, y + 12), g["title"])
                     r = QRectF(x, y + 20, gw, h)
                     self.body(q, r, g)
