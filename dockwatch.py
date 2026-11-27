@@ -161,6 +161,8 @@ TR = {
                    "en": "Devices are recognised by serial number. Empty name — factory name."},
     "theme_thinkpad": {"uk": "ThinkPad (чорна)", "ru": "ThinkPad (чёрная)", "en": "ThinkPad (black)"},
     "theme_ibm": {"uk": "IBM (червоний, синій, зелений)", "ru": "IBM (красный, синий, зелёный)", "en": "IBM (red, blue, green)"},
+    "theme_hp": {"uk": "HP (алюміній, блакитний)", "ru": "HP (алюминий, голубой)", "en": "HP (aluminium, blue)"},
+    "theme_auto": {"uk": "Авто (за ноутбуком)", "ru": "Авто (по ноутбуку)", "en": "Auto (by laptop)"},
     "theme_light": {"uk": "Світла", "ru": "Светлая", "en": "Light"},
     "close": {"uk": "Закрити", "ru": "Закрыть", "en": "Close"},
     "kbd": {"uk": "Підсвітка клавіатури", "ru": "Подсветка клавиатуры", "en": "Keyboard backlight"},
@@ -226,7 +228,7 @@ def load_config():
     cfg.setdefault("names", {})       # "vid:pid:serial" -> своё имя устройства
     cfg.setdefault("seen", {})        # "vid:pid:serial" -> имя от производителя (для окна настроек)
     cfg.setdefault("sound", True)
-    cfg.setdefault("theme", "thinkpad")
+    cfg.setdefault("theme", "auto")
     cfg.setdefault("ui_scale", 1.0)
     cfg.setdefault("animations", True)
     return cfg
@@ -1178,7 +1180,8 @@ def tui():
         w.timeout(1000)
         prev, log = None, []
         glyph = {"usb": "▭", "usbc": "⊂⊃", "vga": "▽", "dp": "◺", "hdmi": "⬡", "dc": "▣", "rj45": "⊞",
-                 "audio": "◉", "card": "▬", "dockport": "⊂▭⊃"}
+                 "audio": "◉", "card": "▬", "dockport": "⊂▭⊃", "barrel": "◎", "sidedock": "▮", "smartcard": "▬",
+                 "sim": "|", "lock": "🔒"}
         while True:
             s = snapshot()
             for e in diff(prev, s):
@@ -1263,6 +1266,9 @@ def qt_app(mode):
         "ibm": dict(red="#E2231A", body="#1c1e22", edge="#2d3036", hole="#070708", metal="#8e9196", ink="#6d7078",
                     txt="#e8eaee", dim="#7d818a", bg="#101215", body_hi="#24272c", body_lo="#16181c", stat="#6f9fe0", line="#1F70C1",
                     blue="#1F70C1", green="#2EA44F"),
+        "hp": dict(red="#0096D6", body="#b9bcc0", edge="#8e9196", hole="#141518", metal="#6c6f73", ink="#5c5f63",
+                   txt="#eef1f4", dim="#8d939b", bg="#16191d", body_hi="#d6d8db", body_lo="#9a9da1", stat="#5fb7e6", line="#0096D6",
+                   port_edge="#5a5d61", pin="#2c2e31", key="#1d2025", key_edge="#33373d", led_on="#ffffff", lens="#0d0e10"),
         "light": dict(red="#E2231A", body="#f2f2f3", edge="#c9c9cc", hole="#f7f7f8", metal="#b4b4b8", ink="#8a8a8e",
                       txt="#1d1d1f", dim="#6e6e73", bg="#fafafa", body_hi="#ffffff", body_lo="#e4e4e7", stat="#c0392b", line="#E2231A",
                       port_edge="#b9b9be", pin="#d4d4d8", key="#ffffff", key_edge="#cfcfd3", led_off="#d8d8dc", lens="#e9e9ec",
@@ -1292,7 +1298,16 @@ def qt_app(mode):
             b, g = t["blue"], t["green"]
             ACCENT.update(usb=b, usbc=b, card=b, hdmi=b, dp=b, vga=b, dockport=b, rj45=g, audio=g, dc=RED)
 
-    apply_theme(load_config().get("theme", "thinkpad"))
+    def resolve_theme(cfg=None):
+        cfg = cfg or load_config()
+        t = cfg.get("theme", "auto")
+        if t in THEMES:
+            return t
+        d, l = detect_profiles(cfg, usb_devices())  # «авто»: тема по ноутбуку (или доку)
+        chosen = {p["id"]: p for p in load_profiles("laptops")}.get(cfg.get("laptop_choice"))
+        return next((p.get("theme") for p in (chosen or l, d) if p and p.get("theme") in THEMES), "thinkpad")
+
+    apply_theme(resolve_theme())
     UI_FONT = "Liberation Sans"
     BASE_W = 1100.0  # logical width: bigger windows scale everything up
 
@@ -1408,6 +1423,16 @@ def qt_app(mode):
                 q.setPen(Qt.NoPen); q.setBrush(HOLE); q.drawEllipse(QPointF(-15, -6), 1.6, 1.6)
                 path.addRoundedRect(QRectF(-22, 3, 44, 5), 2, 2)
                 inner.addRect(QRectF(-18, 4.6, 36, 1.8))
+            elif kind == "barrel":  # круглый разъём питания
+                path.addEllipse(QPointF(0, 0), 8, 8); inner.addEllipse(QPointF(0, 0), 2.6, 2.6)
+            elif kind == "sidedock":  # высокий боковой разъём дока (HP)
+                path.addRoundedRect(QRectF(-6, -15, 12, 30), 3, 3); inner.addRect(QRectF(-2, -11, 4, 22))
+            elif kind == "smartcard":
+                path.addRoundedRect(QRectF(-30, -2.5, 60, 5), 2, 2); inner.addRect(QRectF(-26, -0.8, 52, 1.6))
+            elif kind == "sim":
+                path.addRoundedRect(QRectF(-2.5, -11, 5, 22), 2, 2); inner.addEllipse(QPointF(0, 7), 1, 1)
+            elif kind == "lock":  # замок Kensington
+                path.addRoundedRect(QRectF(-7, -4, 14, 8), 2, 2); inner.addRect(QRectF(-4, -1, 8, 2))
             else:
                 path.addRoundedRect(QRectF(-12, -8, 24, 16), 3, 3)
             if busy:
@@ -1460,7 +1485,19 @@ def qt_app(mode):
                 cx += fm.horizontalAdvance(ch) + h * 0.08
             return cx
 
+        def brand_logo(self, q, x, y, size, text):
+            """Надпись бренда для не-ThinkPad (напр. EliteBook): тонкий шрифт с разрядкой и акцентная черта."""
+            f = QFont("Liberation Sans"); f.setPixelSize(int(size * 0.95)); f.setLetterSpacing(QFont.AbsoluteSpacing, size * 0.06)
+            f.setWeight(QFont.Light)
+            q.setFont(f); q.setPen(TXT); q.drawText(QPointF(x, y - 4), text)
+            w = QFontMetricsF(f).horizontalAdvance(text)
+            q.setPen(Qt.NoPen); q.setBrush(RED); q.drawRect(QRectF(x, y + 2, w * 0.28, 2.5))
+            return x + w
+
         def logo(self, q, x, y, size):
+            brand = (self.s.get("laptop") or {}).get("brand")
+            if brand and THEME["name"] not in ("ibm",) and brand != "ThinkPad":
+                return self.brand_logo(q, x, y, size, brand)
             if THEME["name"] == "ibm":  # тема IBM: вместо ThinkPad — полосатый IBM в трёх цветах
                 return self.ibm_logo(q, x, y - 4, size * 1.05)
             pm = self.logos.get("thinkpad") if self.dark() and THEME["name"] != "ibm" else None
@@ -1527,11 +1564,12 @@ def qt_app(mode):
         def header_media(self, q, kx, cx, cy, maxw):
             """F1/F4 со светодиодами после логотипа; микрофоны и камера — по центру шапки, строка состояния под ними."""
             m = self.s.get("media") or {}
-            self.key(q, QRectF(kx, cy - 17, 54, 34), "🔇", "F1", bool(m.get("spk_muted")))
-            self.key(q, QRectF(kx + 62, cy - 17, 54, 34), "🎙", "F4", bool(m.get("mic_muted")))
+            keys = {"spk": "F1", "mic": "F4", "kbd": "Fn+Space", **((self.s.get("laptop") or {}).get("keys") or {})}
+            self.key(q, QRectF(kx, cy - 17, 54, 34), "🔇", "" if keys["spk"] == "🔇" else keys["spk"], bool(m.get("spk_muted")))
+            self.key(q, QRectF(kx + 62, cy - 17, 54, 34), "🎙", "" if keys["mic"] == "🎙" else keys["mic"], bool(m.get("mic_muted")))
             if m.get("kbd") is not None:  # подсветка клавиатуры (Fn+Space): уровни полосками
                 k = QRectF(kx + 124, cy - 17, 70, 34)
-                self.key(q, k, "⌨", "Fn+Space", None)
+                self.key(q, k, "⌨", "" if keys["kbd"] == "⌨" else keys["kbd"], None)
                 lvl, mx_ = m["kbd"], max(1, m["kbd_max"])
                 for i in range(mx_):
                     on = i < lvl
@@ -1583,7 +1621,8 @@ def qt_app(mode):
             q.setFont(font(12, italic=True)); q.setPen(DIM)
             q.drawText(QPointF(26, 76), f"{tr('docked') if self.s['docked'] else tr('undocked')}  ·  "
                                         f"{tr('busy', n=self.s['busy'], m=self.s['total'])}")
-            lp = self.logos.get("lenovo") if self.dark() and THEME["name"] != "ibm" else None
+            is_tp = (self.s.get("laptop") or {}).get("brand", "ThinkPad") == "ThinkPad" if self.s.get("laptop") else True
+            lp = self.logos.get("lenovo") if self.dark() and THEME["name"] != "ibm" and is_tp else None
             if lp:
                 q.drawPixmap(QRectF(W - 24 - 100, 22, 100, 100 * lp.height() / lp.width()), lp, QRectF(lp.rect()))
             p = self.s["power"]
@@ -1696,7 +1735,8 @@ def qt_app(mode):
             q.restore(); W = W_full
             # footer like the wallpaper: IBM — red line — Technologies and Design
             fy = H - 24
-            ib = self.logos.get("ibm") if self.dark() and THEME["name"] != "ibm" else None
+            is_tp = (self.s.get("laptop") or {}).get("brand", "ThinkPad") == "ThinkPad" if self.s.get("laptop") else True
+            ib = self.logos.get("ibm") if self.dark() and THEME["name"] != "ibm" and is_tp else None
             if THEME["name"] == "ibm":
                 self.ibm_logo(q, 26, fy + 8, 16, (LINEC.name(),) * 3)
                 ib = True
@@ -1705,7 +1745,8 @@ def qt_app(mode):
             q.setPen(QPen(LINEC, 1))
             q.drawLine(QPointF(78 if ib else 26, fy), QPointF(W - 230, fy)); q.drawLine(QPointF(W - 230, fy), QPointF(W - 230, fy - 14))
             q.setFont(font(12, italic=True)); q.setPen(TXT)
-            q.drawText(QRectF(W - 222, fy - 16, 210, 18), Qt.AlignLeft, "Technologies and Design")
+            q.drawText(QRectF(W - 222, fy - 16, 210, 18), Qt.AlignLeft,
+                       (self.s.get("laptop") or {}).get("footer") or "Technologies and Design")
             o = self.s.get("os") or {}
             if o:  # система: логотип дистрибутива + название, ядро, рабочий стол
                 if not hasattr(self, "os_icon"):
@@ -1831,8 +1872,8 @@ def qt_app(mode):
         gen = QWidget(); form = QFormLayout(gen)
         lang = QComboBox(); [lang.addItem(n, c) for c, n in (("uk", "Українська"), ("ru", "Русский"), ("en", "English"))]
         lang.setCurrentIndex(LANGS.index(LANG))
-        theme = QComboBox(); [theme.addItem(tr(f"theme_{t}"), t) for t in THEMES]
-        theme.setCurrentIndex(list(THEMES).index(cfg.get("theme", "thinkpad")) if cfg.get("theme") in THEMES else 0)
+        theme = QComboBox(); [theme.addItem(tr(f"theme_{t}"), t) for t in ("auto", *THEMES)]
+        theme.setCurrentIndex(max(0, ["auto", *THEMES].index(cfg.get("theme", "auto")) if cfg.get("theme") in ("auto", *THEMES) else 0))
         scale = QDoubleSpinBox(); scale.setRange(0.8, 1.6); scale.setSingleStep(0.05); scale.setValue(float(cfg.get("ui_scale", 1.0)))
         form.addRow(tr("m_lang"), lang); form.addRow(tr("s_theme"), theme); form.addRow(tr("s_scale"), scale)
         checks = {}
@@ -1880,7 +1921,7 @@ def qt_app(mode):
         autostart(auto.isChecked())
         if cfg.get("lid_on") and lid_dot_writable():
             lid_dot(True)
-        apply_theme(cfg["theme"])
+        apply_theme(resolve_theme(cfg))
         view.bg = None
         apply(lang=lang.currentData())
 

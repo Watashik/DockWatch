@@ -5,7 +5,7 @@ import json
 import os
 import sys
 
-KINDS = {"usb", "usbc", "hdmi", "dp", "vga", "rj45", "audio", "dc", "card", "dockport"}
+KINDS = {"usb", "usbc", "hdmi", "dp", "vga", "rj45", "audio", "dc", "card", "dockport", "barrel", "sidedock", "smartcard", "sim", "lock"}
 ROLES = {"power", "eth", "dock", "card", "jack"}
 root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "profiles")
 errors = 0

@@ -1,0 +1,30 @@
+{
+  "id": "hp-elitebook-folio-1040-g3",
+  "name": "HP EliteBook Folio 1040 G3",
+  "match": {"dmi": ["EliteBook Folio 1040 G3"]},
+  "theme": "hp",
+  "brand": "EliteBook",
+  "footer": "EliteBook Folio 1040 G3",
+  "keys": {"spk": "🔇", "mic": "🎙", "kbd": "⌨"},
+  "note": "Port positions from photos; USB/USB-C/HDMI bindings need `dockwatch calibrate` once.",
+  "groups": [
+    {"id": "bezel", "row": -1, "w": 1.0, "height": 56, "bezel": true,
+     "title": {"uk": "EliteBook · рамка екрана", "ru": "EliteBook · рамка экрана", "en": "EliteBook · display bezel"}},
+    {"id": "left", "row": 1, "w": 0.5, "height": 62, "vents": [0.12, 0.42],
+     "title": {"uk": "EliteBook Folio 1040 G3 · лівий бік", "ru": "EliteBook Folio 1040 G3 · левый бок", "en": "EliteBook Folio 1040 G3 · left side"}},
+    {"id": "right", "row": 1, "w": 0.5, "height": 62,
+     "title": {"uk": "правий бік", "ru": "правый бок", "en": "right side"}}
+  ],
+  "ports": [
+    {"id": "l_lock", "kind": "lock", "g": "left", "x": 0.05, "mark": "🔒", "label": "Lock"},
+    {"id": "l_usb", "kind": "usb", "g": "left", "x": 0.55, "mark": "SS", "label": "USB"},
+    {"id": "l_audio", "kind": "audio", "g": "left", "x": 0.68, "mark": "🎧", "label": "@audio", "role": "jack"},
+    {"id": "l_sc", "kind": "smartcard", "g": "left", "x": 0.86, "mark": "SC", "label": "Smart Card"},
+    {"id": "r_power", "kind": "barrel", "g": "right", "x": 0.07, "mark": "⎓", "label": "@power", "role": "power"},
+    {"id": "r_dock", "kind": "sidedock", "g": "right", "x": 0.22, "mark": "⇆", "label": "@dock", "role": "dock"},
+    {"id": "r_hdmi", "kind": "hdmi", "g": "right", "x": 0.40, "mark": "HDMI", "label": "HDMI", "video": true, "drm": ["HDMI-A-1"]},
+    {"id": "r_usb", "kind": "usb", "g": "right", "x": 0.56, "mark": "SS⚡", "label": "USB ⚡"},
+    {"id": "r_usbc", "kind": "usbc", "g": "right", "x": 0.72, "mark": "⇆", "label": "USB-C"},
+    {"id": "r_sim", "kind": "sim", "g": "right", "x": 0.88, "mark": "SIM", "label": "SIM"}
+  ]
+}

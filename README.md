@@ -29,7 +29,7 @@ Screenshots in other languages: [українська](docs/screenshot-uk.png) �
 - A USB-C that is also the dock connector is shown as USB-C when undocked and as the dock when docked.
 - **Settings window**: language, theme, scale, sound, animations, options; rename ports; give your own names to devices
   (recognised by serial number — right-click a port → *Rename device*).
-- **Themes**: ThinkPad (black, red), IBM (red/green/blue accents and the striped IBM logo), Light (white ports and keys).
+- **Themes** (auto-picked by laptop): ThinkPad (black, red), HP (aluminium, HP blue, EliteBook wordmark), IBM (red/green/blue accents and the striped IBM logo), Light (white ports and keys).
 - Smooth glow when a port lights up, a fan icon spinning at the real RPM, a short chime on plug/unplug (can be turned off).
 - **Plasma 6 panel widget**: dock icon with the number of busy ports, click for the list (installed by `install.sh`;
   right-click the panel → Add Widgets → DockWatch).
@@ -60,6 +60,12 @@ sudo dnf install python3-pyside6 pulseaudio-utils udisks2 bluez
 # KDE Plasma: the tray icon and the panel widget work out of the box.
 # GNOME: install the "AppIndicator and KStatusNotifierItem Support" extension for the tray icon.
 ```
+Debian 13 / Ubuntu:
+```sh
+sudo apt install python3-pyside6.qtwidgets python3-pyside6.qtsvg python3-pyside6.qtnetwork pulseaudio-utils udisks2
+# GNOME: sudo apt install gnome-shell-extension-appindicator  (tray icon), then log out and in
+```
+
 On Fedora regular users are not in the `users` group, so for the lid-dot blink also run `sudo usermod -aG users $USER`.
 
 Requirements: Python 3, PySide6 (`sudo pacman -S pyside6`). Optional: udisks2, pactl (PipeWire/PulseAudio),
@@ -71,6 +77,8 @@ NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-l
 | Dock | Lenovo ThinkPad Ultra Docking Station (40AJ) | `profiles/docks/lenovo-thinkpad-ultra-dock-40aj.json` |
 | Dock (draft) | Lenovo ThinkPad USB-C Dock Gen 2 (40AS) | `profiles/docks/lenovo-thinkpad-usb-c-dock-gen2-40as.json` |
 | Dock (draft) | Dell WD19 | `profiles/docks/dell-wd19.json` |
+| Dock | HP UltraSlim Docking Station (2013) — choose in the menu | `profiles/docks/hp-ultraslim-dock-2013.json` |
+| Laptop | HP EliteBook Folio 1040 G3 | `profiles/laptops/hp-elitebook-folio-1040-g3.json` |
 | Laptop | Lenovo ThinkPad L14 Gen 1 | `profiles/laptops/lenovo-thinkpad-l14-gen1.json` |
 
 *Draft* profiles are made from spec sheets and not verified on real hardware; they are only selectable manually in the menu until someone confirms them.

@@ -1,0 +1,25 @@
+{
+  "id": "hp-ultraslim-dock-2013",
+  "name": "HP UltraSlim Docking Station (2013)",
+  "note": "Layout from photos. USB hub IDs for auto-detection are not known yet — choose it in the menu, then send `lsusb` output.",
+  "match": {"usb_hubs": []},
+  "usb_hubs": {},
+  "theme": "hp",
+  "groups": [
+    {"id": "dock", "row": 0, "w": 1.0, "height": 96, "tower": false,
+     "title": {"uk": "HP UltraSlim Dock · задня панель", "ru": "HP UltraSlim Dock · задняя панель", "en": "HP UltraSlim Dock · rear panel"}}
+  ],
+  "ports": [
+    {"id": "vga", "kind": "vga", "g": "dock", "x": 0.06, "mark": "▭", "label": "VGA", "video": true},
+    {"id": "eth", "kind": "rj45", "g": "dock", "x": 0.16, "mark": "⊞", "label": "LAN", "role": "eth"},
+    {"id": "dp1", "kind": "dp", "g": "dock", "x": 0.27, "mark": "D▸", "label": "DP 1", "video": true},
+    {"id": "dp2", "kind": "dp", "g": "dock", "x": 0.38, "mark": "D▸", "label": "DP 2", "video": true},
+    {"id": "usb1", "kind": "usb", "g": "dock", "x": 0.48, "mark": "SS", "label": "USB 1"},
+    {"id": "usb2", "kind": "usb", "g": "dock", "x": 0.56, "mark": "SS", "label": "USB 2"},
+    {"id": "usb3", "kind": "usb", "g": "dock", "x": 0.64, "mark": "SS", "label": "USB 3"},
+    {"id": "usb4", "kind": "usb", "g": "dock", "x": 0.72, "mark": "SS⚡", "label": "USB ⚡"},
+    {"id": "power", "kind": "barrel", "g": "dock", "x": 0.82, "mark": "⎓", "label": "@power", "role": "power"},
+    {"id": "out", "kind": "audio", "g": "dock", "x": 0.91, "mark": "🎧", "label": "@audio", "role": "jack"},
+    {"id": "mic", "kind": "audio", "g": "dock", "x": 0.97, "mark": "🎙", "label": "Mic"}
+  ]
+}
