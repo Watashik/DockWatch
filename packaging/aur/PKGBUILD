@@ -1,6 +1,6 @@
 # Maintainer: Watashik <https://github.com/Watashik>
 pkgname=dockwatch
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Live port map of your docking station and laptop (ThinkPad style): tray, GUI and TUI, plug/unplug notifications"
 arch=('any')
