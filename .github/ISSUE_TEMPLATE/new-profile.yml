@@ -39,6 +39,9 @@ body:
       description: For each side, list the connectors left → right (e.g. "Rear: DC, RJ45, USB-A, USB-A, HDMI, DP, DP").
     validations:
       required: true
+  - type: markdown
+    attributes:
+      value: "Easiest: run `dockwatch report` (or menu → *Collect data for a profile*) and attach the `dockwatch-report-*.tar.gz` below — then the `lsusb` fields can be just \"see report\"."
   - type: textarea
     id: lsusb
     attributes:

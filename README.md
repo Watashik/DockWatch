@@ -24,7 +24,11 @@ Screenshots in other languages: [українська](docs/screenshot-uk.png) �
 - Per port: device name, USB speed, declared current, **disk read/write and network speed** with a one-minute sparkline,
   USB-C **Power Delivery** role and current, LAN speed and traffic.
 - Phones: detects the USB mode (MTP file transfer, PTP, ADB, tethering, MIDI).
-- SD card slot, 3.5 mm jack (headphones / headset), HDMI/DP/VGA monitors (name from EDID, resolution).
+- SD card slot, 3.5 mm jack (headphones / headset), HDMI/DP/VGA monitors (name from EDID, resolution, refresh rate
+  and scale from KDE / Hyprland / wlroots / X11).
+- **Slow USB warning**: a USB 3 device that only got USB 2 speed (USB 2 port, bad cable or adapter) is marked ⚠.
+- **Alerts** (can be turned off in Settings): running hot (threshold in Settings), charger connected but the battery is
+  draining (weak adapter or cable), battery low, slow USB, laptop docked but the dock has no power.
 - Header: camera and microphones state (in use by which app, muted), F1/F4 mute LEDs, sound volume,
   battery level, wear and cycles, power profile, Wi‑Fi network, connected Bluetooth devices with battery.
 - Temperatures (CPU/GPU/SSD, NVIDIA via `nvidia-smi`) and fan RPM under the vent grille, which glows as the laptop heats up;
@@ -58,7 +62,8 @@ Screenshots in other languages: [українська](docs/screenshot-uk.png) �
 | `dockwatch gui` | window only |
 | `dockwatch tui` | terminal version (curses) |
 | `dockwatch dump` | plain-text state |
-| `dockwatch calibrate` | bind system USB ports to physical connectors: plug a flash drive into each one |
+| `dockwatch calibrate` | bind system USB ports to physical connectors in the terminal (in the window: menu → *Calibrate ports* — the port to use glows, plug anything in, click to skip) |
+| `dockwatch report` | collect everything needed for a new laptop profile into `~/dockwatch-report-<model>.tar.gz` (no serial numbers, user or host names) — also in the menu |
 | `dockwatch make-profile` | print a profile of this laptop (auto layout) as JSON |
 | `dockwatch json` | machine-readable state for scripts and widgets |
 
@@ -112,7 +117,7 @@ Profiles are plain JSON — copy an existing one:
 - `theme`, `brand` (header wordmark), `footer` — looks.
 
 Check it with `python tools/check_profiles.py` (also run by GitHub Actions on every push), then run `dockwatch calibrate` once. New profiles are welcome — open an issue with the **New dock / laptop profile** form
-(photo of the ports + `lsusb`).
+(photos of the sides + the archive from `dockwatch report`).
 
 ## Plugins
 Drop a `*.py` into `~/.local/share/dockwatch/plugins/`. A plugin may define `TR` (translations), `CLI` (extra commands),

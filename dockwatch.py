@@ -16,6 +16,7 @@ User config: ~/.config/dockwatch/config.json
 import argparse
 import glob
 import json
+import math
 import os
 import random
 import re
@@ -65,7 +66,6 @@ TR = {
                    "en": "Not bound to a connector (dockwatch calibrate):"},
     "m_show": {"uk": "Схема", "ru": "Схема", "en": "Port map"},
     "m_tui": {"uk": "Відкрити в терміналі", "ru": "Открыть в терминале", "en": "Open in terminal"},
-    "m_cal": {"uk": "Калібрування портів…", "ru": "Калибровка портов…", "en": "Calibrate ports…"},
     "m_lang": {"uk": "Мова", "ru": "Язык", "en": "Language"},
     "m_quit": {"uk": "Вийти", "ru": "Выход", "en": "Quit"},
     "tui_foot": {"uk": "q — вихід · c — калібрування", "ru": "q — выход · c — калибровка", "en": "q — quit · c — calibrate"},
@@ -186,6 +186,36 @@ TR = {
     "e_del": {"uk": "🗑 Видалити порт", "ru": "🗑 Удалить порт", "en": "🗑 Delete port"},
     "e_label": {"uk": "Назва порту:", "ru": "Название порта:", "en": "Port name:"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
+    "usb_slow": {"uk": "⚠ USB 3 працює як USB 2 (порт або кабель)", "ru": "⚠ USB 3 работает как USB 2 (порт или кабель)",
+                 "en": "⚠ USB 3 device running at USB 2 speed (port or cable)"},
+    "al_slow": {"uk": "{x}: працює на швидкості USB 2 — спробуйте інший порт або кабель",
+                "ru": "{x}: работает на скорости USB 2 — попробуйте другой порт или кабель",
+                "en": "{x}: running at USB 2 speed — try another port or cable"},
+    "al_temp": {"uk": "🌡 Гаряче: {x} {t:.0f}°C", "ru": "🌡 Горячо: {x} {t:.0f}°C", "en": "🌡 Running hot: {x} {t:.0f}°C"},
+    "al_charge": {"uk": "🔌 Зарядка під'єднана, але батарея розряджається — слабкий блок живлення або кабель",
+                  "ru": "🔌 Зарядка подключена, но батарея разряжается — слабый блок питания или кабель",
+                  "en": "🔌 Charger connected but the battery is draining — weak power adapter or cable"},
+    "al_bat": {"uk": "🪫 Батарея {p}% — під'єднайте зарядку", "ru": "🪫 Батарея {p}% — подключите зарядку",
+               "en": "🪫 Battery at {p}% — plug in the charger"},
+    "al_dock": {"uk": "⚠ Ноутбук у доці, але док без живлення — перевірте блок живлення дока",
+                "ru": "⚠ Ноутбук в доке, но док без питания — проверьте блок питания дока",
+                "en": "⚠ Laptop is docked but the dock has no power — check the dock's power adapter"},
+    "dock_nopower": {"uk": "док без живлення", "ru": "док без питания", "en": "dock has no power"},
+    "s_alerts": {"uk": "Попередження (температура, зарядка, батарея, повільний USB, док)",
+                 "ru": "Предупреждения (температура, зарядка, батарея, медленный USB, док)",
+                 "en": "Alerts (temperature, charging, battery, slow USB, dock)"},
+    "s_alert_temp": {"uk": "Поріг температури, °C", "ru": "Порог температуры, °C", "en": "Temperature alert, °C"},
+    "m_cal": {"uk": "🎯 Калібрувати порти", "ru": "🎯 Откалибровать порты", "en": "🎯 Calibrate ports"},
+    "cal_banner": {"uk": "Калібрування {i}/{n}: вставте будь-який USB-пристрій у підсвічений порт «{p}» · клік — пропустити · Esc — вийти",
+                   "ru": "Калибровка {i}/{n}: вставьте любое USB-устройство в подсвеченный порт «{p}» · клик — пропустить · Esc — выйти",
+                   "en": "Calibration {i}/{n}: plug any USB device into the highlighted port “{p}” · click — skip · Esc — quit"},
+    "cal_bound": {"uk": "🎯 {p} — прив'язано", "ru": "🎯 {p} — привязан", "en": "🎯 {p} — bound"},
+    "cal_finished": {"uk": "🎯 Калібрування завершено: прив'язано {n}", "ru": "🎯 Калибровка завершена: привязано {n}",
+                     "en": "🎯 Calibration finished: {n} bound"},
+    "m_report": {"uk": "📦 Зібрати дані для профілю", "ru": "📦 Собрать данные для профиля", "en": "📦 Collect data for a profile"},
+    "report_saved": {"uk": "Збережено: {x}\nНадішліть цей файл разом із фото боків ноутбука.",
+                     "ru": "Сохранено: {x}\nПришлите этот файл вместе с фото боков ноутбука.",
+                     "en": "Saved: {x}\nSend this file together with photos of the laptop's sides."},
 }
 LANG = "en"
 
@@ -246,6 +276,8 @@ def load_config():
     cfg.setdefault("names", {})       # "vid:pid:serial" -> своё имя устройства
     cfg.setdefault("seen", {})        # "vid:pid:serial" -> имя от производителя (для окна настроек)
     cfg.setdefault("sound", True)
+    cfg.setdefault("alerts", True)
+    cfg.setdefault("alert_temp", 90)
     cfg.setdefault("theme", "auto")
     cfg.setdefault("ui_scale", 1.0)
     cfg.setdefault("animations", True)
@@ -302,9 +334,18 @@ def usb_devices():
             "product": rd(f"{p}/product"), "maker": rd(f"{p}/manufacturer"),
             "speed": rd(f"{p}/speed"), "cls": rd(f"{p}/bDeviceClass"),
             "ifcls": rd(ifc[0]) if ifc else "", "removable": rd(f"{p}/removable"), "ifaces": ifaces,
-            "serial": rd(f"{p}/serial"),
+            "serial": rd(f"{p}/serial"), "version": rd(f"{p}/version").strip(),
         }
     return devs
+
+
+def usb_slow(d):
+    """USB 3 устройство, которое договорилось только на скорость USB 2 (плохой кабель, порт USB 2, переходник)."""
+    try:
+        ver = float(d.get("version") or 0)
+    except ValueError:
+        return False
+    return ver >= 3 and d.get("speed") in ("1.5", "12", "480") and d.get("cls") != "09"
 
 
 def detect_profiles(cfg, devs):
@@ -610,6 +651,62 @@ def drm_mst_path(card, connector_id):
     finally:
         os.close(fd)
     return ""
+
+
+_DM = {"t": -99.0, "modes": {}}
+
+
+def display_modes():
+    """Текущий режим мониторов (разрешение, частота, масштаб) от композитора: KDE, Hyprland, wlroots, X11.
+    {коннектор: (w, h, hz, scale)}; обновляется раз в 5 с."""
+    import shutil
+    if time.monotonic() - _DM["t"] < 5:
+        return _DM["modes"]
+    _DM["t"] = time.monotonic()
+    out = {}
+
+    def run(*cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout
+        except (OSError, subprocess.SubprocessError):
+            return ""
+    try:
+        if shutil.which("kscreen-doctor") and os.environ.get("XDG_CURRENT_DESKTOP", "").upper().find("KDE") >= 0:
+            for o in json.loads(run("kscreen-doctor", "-j") or "{}").get("outputs", []):
+                m = next((m for m in o.get("modes", []) if m.get("id") == o.get("currentModeId")), None)
+                if o.get("enabled") and m:
+                    out[o["name"]] = (m["size"]["width"], m["size"]["height"], m["refreshRate"], o.get("scale", 1))
+        elif shutil.which("hyprctl") and os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+            for o in json.loads(run("hyprctl", "monitors", "-j") or "[]"):
+                out[o["name"]] = (o["width"], o["height"], o["refreshRate"], o.get("scale", 1))
+        elif shutil.which("wlr-randr") and os.environ.get("WAYLAND_DISPLAY"):
+            for o in json.loads(run("wlr-randr", "--json") or "[]"):
+                m = next((m for m in o.get("modes", []) if m.get("current")), None)
+                if o.get("enabled") and m:
+                    out[o["name"]] = (m["width"], m["height"], m["refresh"], o.get("scale", 1))
+        elif shutil.which("xrandr") and os.environ.get("DISPLAY"):
+            name = None
+            for line in run("xrandr", "--query").splitlines():
+                if " connected" in line:
+                    name = line.split()[0]
+                elif name and "*" in line:
+                    res, *rates = line.split()
+                    hz = next((r for r in rates if "*" in r), "0").strip("*+")
+                    w, h = res.split("x")[:2]
+                    out[name] = (int(w), int(h.split("i")[0]), float(hz or 0), 1)
+                    name = None
+    except (ValueError, KeyError, TypeError):
+        pass
+    _DM["modes"] = out
+    return out
+
+
+def mode_text(conn, fallback):
+    m = display_modes().get(conn) or display_modes().get(conn.replace("-A-", "-"))  # xrandr: HDMI-1, DRM: HDMI-A-1
+    if not m:
+        return fallback
+    w, h, hz, sc = m
+    return f"{w}×{h} · {hz:.0f} Hz" + (f" · ×{sc:g}" if sc and abs(sc - 1) > 0.01 else "")
 
 
 def video_outputs():
@@ -1169,6 +1266,7 @@ def snapshot(cfg=None):
     # привязка портов: встроенная в профиль (у одной модели топология одинаковая) + своя калибровка поверх
     usb_map = {**(laptop or {}).get("usb", {}), **(dock or {}).get("usb", {}), **cfg["usb"]}
     seen_dirty = False
+    slow = []
     for d in usb:
         nm = d["product"] or d["maker"] or d["vid"] + ":" + d["pid"]
         if d["maker"] and d["product"] and d["maker"].split()[0].lower() not in d["product"].lower() and len(d["maker"]) < 16:
@@ -1184,6 +1282,9 @@ def snapshot(cfg=None):
             item += " · " + " + ".join(tr(m) for m in modes)
         if speed_text(d["speed"]):
             item += f" · {speed_text(d['speed'])}"
+        if usb_slow(d):
+            item += " · " + tr("usb_slow")
+            slow.append((k, nm))
         stat, spd = usb_stats(d["name"])
         stat = stat if show else ""
         pid = cfg["usb"].get(d["key"])
@@ -1201,7 +1302,7 @@ def snapshot(cfg=None):
     for v in video_outputs().values():
         if not v["connected"]:
             continue
-        item = f"🖥 {v['monitor'] or tr('monitor')} · {v['mode']}" + ("" if v["edid"] else f" · {tr('no_edid')}")
+        item = f"🖥 {v['monitor'] or tr('monitor')} · {mode_text(v['conn'], v['mode'])}" + ("" if v["edid"] else f" · {tr('no_edid')}")
         vmap = {**(laptop or {}).get("video", {}), **(dock or {}).get("video", {}), **cfg["video"]}
         # MST (видео через хаб дока): по номеру порта хаба — он не меняется, в отличие от DP-3/DP-4…
         pid = (vmap.get(v["mst"]) if v["mst"] else None) or \
@@ -1274,9 +1375,53 @@ def snapshot(cfg=None):
                 p["led_color"] = lc.get("full", "#ffffff") if pct >= lc.get("full_at", 90) else lc.get("low", "#ff3b30")
     busy = sum(p["busy"] for p in ports.values() if p["kind"] != "led")
     return {"docked": docked, "groups": groups, "ports": ports, "loose": loose, "loose_stats": loose_stats,
-            "busy": busy, "total": sum(1 for p in ports.values() if p["kind"] != "led"), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden,
+            "busy": busy, "total": sum(1 for p in ports.values() if p["kind"] != "led"), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden, "slow_usb": slow,
+            "dock_nopower": bool(docked and not pw["ac"]),
             "show_stats": show, "sensors": sensors(), "media": media_state(),
             "battery": battery_info(), "net": net_info(), "lid_closed": lid_closed(), "os": OS_INFO, "ts": time.time()}
+
+
+def alerts(s, prev, st, cfg):
+    """Предупреждения по правилам; st — память между тиками (чтобы не повторять одно и то же)."""
+    if not cfg.get("alerts", True) or prev is None:
+        return []
+    out, now = [], s["ts"]
+    limit = float(cfg.get("alert_temp", 90))
+    temps = (s.get("sensors") or {}).get("temps", {})
+    hot = max(temps.items(), key=lambda kv: kv[1], default=None)
+    if hot and hot[1] >= limit and not st.get("hot"):
+        st["hot"] = True
+        out.append(tr("al_temp", x="GPU" if hot[0] == "dGPU" else hot[0], t=hot[1]))
+    elif not hot or hot[1] < limit - 5:
+        st["hot"] = False
+    pw = s.get("power") or {}
+    if pw.get("ac") and pw.get("status") == "Discharging":
+        st.setdefault("drain_since", now)
+        if now - st["drain_since"] > 60 and not st.get("drain_told"):
+            st["drain_told"] = True
+            out.append(tr("al_charge"))
+    else:
+        st.pop("drain_since", None); st["drain_told"] = False
+    pct = int(pw["pct"]) if str(pw.get("pct", "")).isdigit() else 100
+    if not pw.get("ac") and pct <= 15:
+        if not st.get("low_told"):
+            st["low_told"] = True
+            out.append(tr("al_bat", p=pct))
+    else:
+        st["low_told"] = False
+    told = st.setdefault("slow", set())
+    for k, nm in s.get("slow_usb", []):
+        if k not in told:
+            told.add(k)
+            out.append(tr("al_slow", x=nm))
+    if s.get("dock_nopower"):
+        st.setdefault("nopower_since", now)
+        if now - st["nopower_since"] > 15 and not st.get("nopower_told"):  # не сразу: зарядка включается не мгновенно
+            st["nopower_told"] = True
+            out.append(tr("al_dock"))
+    else:
+        st.pop("nopower_since", None); st["nopower_told"] = False
+    return out
 
 
 def diff(old, new):
@@ -1338,6 +1483,58 @@ def make_profile():
     with open(out, "w") as f:
         json.dump(p, f, ensure_ascii=False, indent=2)
     print(f"{out}\n→ поправь порядок портов (x) и виды разъёмов по фото, положи в profiles/laptops/ и пришли PR.")
+
+
+def make_report(quiet=False):
+    """dockwatch report — архив с данными о ноутбуке для нового профиля (без серийных номеров, имени пользователя и хоста)."""
+    import io
+    import tarfile
+    files = {}
+
+    def run(*cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout
+        except (OSError, subprocess.SubprocessError):
+            return ""
+    dmi = {k: rd(f"/sys/class/dmi/id/{k}") for k in ("sys_vendor", "product_name", "product_version", "product_family",
+                                                     "board_vendor", "board_name", "bios_version", "chassis_type")}
+    osr = dict(re.findall(r'^(\w+)="?([^"\n]*)"?', open("/etc/os-release").read(), re.M)) if os.path.exists("/etc/os-release") else {}
+    files["info.json"] = json.dumps({"dockwatch": VERSION if "VERSION" in globals() else "", "dmi": dmi,
+                                     "os": osr.get("PRETTY_NAME", ""), "kernel": os.uname().release,
+                                     "desktop": os.environ.get("XDG_CURRENT_DESKTOP", ""),
+                                     "session": os.environ.get("XDG_SESSION_TYPE", "")}, ensure_ascii=False, indent=2)
+    prof = generic_profile(); prof.pop("auto", None)
+    files["auto-profile.json"] = json.dumps(prof, ensure_ascii=False, indent=2)
+    devs = usb_devices()
+    for d in devs.values():
+        d.pop("serial", None)
+    files["usb-devices.json"] = json.dumps(devs, ensure_ascii=False, indent=2)
+    files["usb-ports.txt"] = "\n".join(f"{os.path.basename(p)}  peer={os.path.basename(os.path.realpath(p + '/peer')) if os.path.exists(p + '/peer') else ''}"
+                                       f"  type={rd(p + '/connect_type')}"
+                                       for p in sorted(glob.glob("/sys/bus/usb/devices/*/*-port*")))
+    files["lsusb.txt"] = run("lsusb") + "\n" + run("lsusb", "-t")
+    files["video.json"] = json.dumps(video_outputs(), ensure_ascii=False, indent=2) + "\n" + json.dumps(display_modes(), indent=2)
+    files["sysfs.txt"] = "\n".join([
+        "typec: " + " ".join(sorted(os.path.basename(p) for p in glob.glob("/sys/class/typec/*"))),
+        "power_supply: " + " ".join(f"{os.path.basename(p)}({rd(p + '/type')})" for p in sorted(glob.glob("/sys/class/power_supply/*"))),
+        "hwmon: " + " ".join(sorted(rd(p + "/name") for p in glob.glob("/sys/class/hwmon/hwmon*"))),
+        "leds: " + " ".join(sorted(os.path.basename(p) for p in glob.glob("/sys/class/leds/*"))),
+        "net: " + " ".join(sorted(os.path.basename(p) for p in glob.glob("/sys/class/net/*") if not p.endswith("/lo"))),
+        "drm: " + " ".join(sorted(f"{os.path.basename(p)}={rd(p + '/status')}" for p in glob.glob("/sys/class/drm/card*-*"))),
+        "sound: " + run("cat", "/proc/asound/cards"),
+        "sensors: " + json.dumps(sensors()),
+    ])
+    files["dump.txt"] = run(sys.executable, os.path.abspath(__file__), "dump")
+    slug = re.sub(r"[^a-z0-9]+", "-", (dmi["product_version"] or dmi["product_name"] or "laptop").lower()).strip("-")
+    out = os.path.join(os.path.expanduser("~"), f"dockwatch-report-{slug}.tar.gz")
+    with tarfile.open(out, "w:gz") as tf:
+        for name, text in files.items():
+            data = text.encode()
+            ti = tarfile.TarInfo(f"dockwatch-report-{slug}/{name}"); ti.size = len(data); ti.mtime = int(time.time())
+            tf.addfile(ti, io.BytesIO(data))
+    if not quiet:
+        print(tr("report_saved", x=out))
+    return out
 
 
 def dump_json():
@@ -1405,6 +1602,21 @@ def dump():
 
 
 # ---------------------------------------------------------------- calibration
+def cal_keys(new, dock):
+    """Ключи портов для только что вставленных устройств (+ парный порт USB 2/USB 3 того же разъёма)."""
+    _, _, devs, roots = scan_usb(dock)
+    keys = set()
+    for d in new:
+        keys.add(d["key"])
+        n = d["name"]
+        r = next((r for r in roots if n.startswith(r + ".")), None)
+        top = r + "." + n[len(r) + 1:].split(".")[0] if r else n.split(".")[0]
+        peer = peer_of(top)
+        if peer:
+            keys.add(port_key(peer, devs, roots, dock)[0])
+    return keys
+
+
 def calibrate():
     cfg = load_config()
     print(tr("cal_intro"))
@@ -1430,16 +1642,7 @@ def calibrate():
         if not new:
             print(tr("cal_none"))
             continue
-        _, _, devs, roots = scan_usb(s["dock"])
-        keys = set()
-        for d in new:
-            keys.add(d["key"])
-            n = d["name"]
-            r = next((r for r in roots if n.startswith(r + ".")), None)
-            top = r + "." + n[len(r) + 1:].split(".")[0] if r else n.split(".")[0]
-            peer = peer_of(top)
-            if peer:
-                keys.add(port_key(peer, devs, roots, s["dock"])[0])
+        keys = cal_keys(new, s["dock"])
         for k in keys:
             cfg["usb"][k] = p["id"]
         print("✔", ", ".join(sorted(keys)))
@@ -1556,7 +1759,7 @@ def qt_app(mode):
         from PySide6.QtGui import (QAction, QActionGroup, QBrush, QColor, QFont, QFontMetricsF, QIcon, QLinearGradient,
                                    QPainter, QPainterPath, QPen, QPixmap, QRadialGradient)
         from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-                                       QFormLayout, QHeaderView, QInputDialog, QLabel, QMenu, QSystemTrayIcon,
+                                       QFormLayout, QHeaderView, QInputDialog, QLabel, QMenu, QMessageBox, QSpinBox, QSystemTrayIcon,
                                        QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
     except ImportError:
         sys.exit(tr("need_qt"))
@@ -1669,6 +1872,7 @@ def qt_app(mode):
             self.logos = {n: asset(f"{n}.png") for n in ("thinkpad", "ibm", "lenovo")}
             self.hist = {}
             self.editing = False
+            self.cal = None      # калибровка в окне: {"queue": [pid…], "i": n, "before": {usb names}, "bound": n}
             self.gear_hover = False
             self.drag = None
             self.grects = {}
@@ -1677,6 +1881,7 @@ def qt_app(mode):
             self.anim_t = time.monotonic()
             self.profile = power_profile()
             self.setMouseTracking(True)
+            self.setFocusPolicy(Qt.StrongFocus)
 
         def update_state(self, s, events):
             if self.editing:
@@ -1703,7 +1908,7 @@ def qt_app(mode):
             if not load_config().get("animations", True):
                 return False
             now = time.monotonic()
-            return any(now - t < 0.8 for t in self.lit.values())
+            return bool(self.cal) or any(now - t < 0.8 for t in self.lit.values())
 
         def connector(self, q, kind, c, busy, k=1.0, pid=None):
             fade = 1.0
@@ -1981,7 +2186,8 @@ def qt_app(mode):
             x_after = self.logo(q, 24, 52, 32)
             q.setFont(font(12, italic=True)); q.setPen(DIM)
             q.drawText(QPointF(26, 76), f"{tr('docked') if self.s['docked'] else tr('undocked')}  ·  "
-                                        f"{tr('busy', n=self.s['busy'], m=self.s['total'])}")
+                                        f"{tr('busy', n=self.s['busy'], m=self.s['total'])}"
+                                        + (f"  ·  ⚠ {tr('dock_nopower')}" if self.s.get("dock_nopower") else ""))
             is_tp = (self.s.get("laptop") or {}).get("brand", "ThinkPad") == "ThinkPad" if self.s.get("laptop") else True
             lp = self.logos.get("lenovo") if self.dark() and THEME["name"] != "ibm" and is_tp else None
             if lp:
@@ -2063,6 +2269,17 @@ def qt_app(mode):
                     q.drawRoundedRect(r.adjusted(-4, -4, 4, 4), 9, 9)
                 q.setFont(font(12, italic=True)); q.setPen(RED)
                 q.drawText(QRectF(24, y - 30, W - 48, 18), Qt.AlignLeft, tr("edit_hint"))
+            if self.cal and self.cal["i"] < len(self.cal["queue"]):  # калибровка: подсветить порт и подсказка
+                pid = self.cal["queue"][self.cal["i"]]
+                rr = self.rects.get(pid)
+                if rr is not None:
+                    a = 0.5 + 0.5 * math.sin(time.monotonic() * 5)
+                    c = QColor(LED_ON); c.setAlphaF(0.35 + 0.5 * a)
+                    q.setPen(QPen(c, 3)); q.setBrush(Qt.NoBrush); q.drawRoundedRect(rr.adjusted(-3, -3, 3, -14), 8, 8)
+                q.setFont(font(12, bold=True)); q.setPen(LED_ON)
+                lab = self.s["ports"].get(pid, {}).get("label", pid)
+                q.drawText(QRectF(24, H - 66, W - 110, 18), Qt.AlignLeft,
+                           tr("cal_banner", i=self.cal["i"] + 1, n=len(self.cal["queue"]), p=lab))
             # connected / events — в той же центральной колонке, что и схема
             q.save(); q.translate(off, 0); W_full, W = W, CW
             q.setFont(font(14, bold=True)); q.setPen(TXT); q.drawText(QPointF(28, y + 6), tr("connected"))
@@ -2228,8 +2445,20 @@ def qt_app(mode):
         def group_at(self, pos):
             return next((gid for gid, (r, _) in self.grects.items() if r.adjusted(-6, -24, 6, 24).contains(pos)), None)
 
+        def keyPressEvent(self, e):
+            if self.cal and e.key() == Qt.Key_Escape:
+                cal_stop()
+                return
+            if self.cal and e.key() in (Qt.Key_Space, Qt.Key_Right, Qt.Key_S):
+                cal_next()
+                return
+            super().keyPressEvent(e)
+
         def mousePressEvent(self, e):
             pos = e.position() / self.scale
+            if self.cal and e.button() == Qt.LeftButton:
+                cal_next()
+                return
             if e.button() == Qt.LeftButton and getattr(self, "gear", None) is not None and self.gear.contains(pos):
                 settings()
                 return
@@ -2373,6 +2602,8 @@ def qt_app(mode):
         for opt, key in opts:
             c = QCheckBox(tr(key)); c.setChecked(bool(cfg.get(opt))); form.addRow(c); checks[opt] = c
         auto = QCheckBox(tr("m_autostart")); auto.setChecked(autostart()); form.addRow(auto)
+        al = QCheckBox(tr("s_alerts")); al.setChecked(bool(cfg.get("alerts", True))); form.addRow(al); checks["alerts"] = al
+        atemp = QSpinBox(); atemp.setRange(60, 105); atemp.setValue(int(cfg.get("alert_temp", 90))); form.addRow(tr("s_alert_temp"), atemp)
         tabs.addTab(gen, tr("s_general"))
         # порты
         ports = [(pid, p) for pid, p in view.s["ports"].items()]
@@ -2400,6 +2631,7 @@ def qt_app(mode):
         cfg = load_config()
         for opt, c in checks.items():
             cfg[opt] = c.isChecked()
+        cfg["alert_temp"] = atemp.value()
         cfg["theme"] = theme.currentData(); cfg["ui_scale"] = round(scale.value(), 2)
         for i, (pid, _) in enumerate(ports):
             v = (pt.item(i, 1).text() if pt.item(i, 1) else "").strip()
@@ -2414,6 +2646,55 @@ def qt_app(mode):
         apply_theme(resolve_theme(cfg))
         view.bg = None
         apply(lang=lang.currentData())
+
+    # ---- калибровка в окне: подсвечиваем порт, ждём новое USB-устройство, привязываем, идём дальше
+    def cal_start():
+        if view.editing:
+            toggle_edit(False)
+        q = [pid for pid, p in view.s["ports"].items() if p["kind"] in ("usb", "usbc")]
+        if not q:
+            return
+        view.cal = {"queue": q, "i": 0, "bound": 0, "before": {d["name"] for d in scan_usb(view.s["dock"])[0]}, "seen": None}
+        view.show(); view.raise_(); view.activateWindow(); view.setFocus(); view.update()
+
+    def cal_next():
+        c = view.cal
+        c["i"] += 1; c["seen"] = None
+        c["before"] = {d["name"] for d in scan_usb(view.s["dock"])[0]}
+        if c["i"] >= len(c["queue"]):
+            cal_stop()
+        view.update()
+
+    def cal_stop():
+        c, view.cal = view.cal, None
+        if c is not None:
+            notify(tr("cal_finished", n=c["bound"]))
+        state["prev"] = None
+        tick()
+
+    def cal_step(s):
+        c = view.cal
+        now = scan_usb(s["dock"])[0]
+        new = [d for d in now if d["name"] not in c["before"]]
+        if not new:
+            c["before"] &= {d["name"] for d in now}  # вынули прошлое устройство — забываем его
+            return
+        if c["seen"] is None:  # ждём ещё тик: у составных устройств (хабы, телефоны) части появляются не сразу
+            c["seen"] = time.monotonic()
+            return
+        pid = c["queue"][c["i"]]
+        cfg = load_config()
+        for k in cal_keys(new, s["dock"]):
+            cfg["usb"][k] = pid
+        save_config(cfg)
+        c["bound"] += 1
+        view.log.insert(0, time.strftime("%H:%M:%S  ") + tr("cal_bound", p=s["ports"][pid]["label"]))
+        cal_next()
+
+    def make_report_ui():
+        path = make_report(quiet=True)
+        QMessageBox.information(view, "DockWatch", tr("report_saved", x=path))
+        subprocess.Popen(["xdg-open", os.path.dirname(path)], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
     def toggle_edit(on):
         view.editing = on
@@ -2450,6 +2731,12 @@ def qt_app(mode):
         state["prev"] = s
         view.update_state(s, ev)
         plugin_call("on_tick", s, ev, ctx)
+        for a in alerts(s, prev, state.setdefault("alerts", {}), load_config()):
+            log_event(a)
+            view.log.insert(0, time.strftime("%H:%M:%S  ") + a)
+            notify(a)
+        if view.cal:
+            cal_step(s)
         for e in ev:
             log_event(e)
         if ev:
@@ -2495,7 +2782,8 @@ def qt_app(mode):
             menu.addAction(tr("m_edit_reset"), reset_edits)
         plugin_call("menu", lambda title, fn: menu.addAction(title, fn), ctx)
         menu.addAction(tr("m_tui"), lambda: run_in_terminal("tui"))
-        menu.addAction(tr("m_cal"), lambda: run_in_terminal("calibrate"))
+        menu.addAction(tr("m_cal"), cal_start)
+        menu.addAction(tr("m_report"), make_report_ui)
         menu.addSeparator()
         for key, opt in (("m_stats", "show_stats"), ("m_hidedock", "hide_dock")):
             a = menu.addAction(tr(key))
@@ -2593,7 +2881,7 @@ def qt_app(mode):
         else:
             view.anim_t = time.monotonic()
 
-    ctx.update({"view": view, "tray": lambda: tray, "app": app, "notify": notify,
+    ctx.update({"view": view, "tray": lambda: tray, "calibrate": cal_start, "report": make_report, "app": app, "notify": notify,
                 "QtWidgets": __import__("PySide6.QtWidgets", fromlist=["x"]), "QtGui": __import__("PySide6.QtGui", fromlist=["x"]), "Qt": Qt})
     plugin_call("on_start", ctx)
     anim = QTimer()
@@ -2615,11 +2903,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     load_plugins()
     extra = {k: v for m in PLUGINS for k, v in getattr(m, "CLI", {}).items()}
-    ap.add_argument("mode", nargs="?", default="app", choices=["app", "tray", "gui", "tui", "calibrate", "dump", "json", "make-profile", *extra])
+    ap.add_argument("mode", nargs="?", default="app", choices=["app", "tray", "gui", "tui", "calibrate", "dump", "json", "make-profile", "report", *extra])
     ap.add_argument("--lang", choices=LANGS)
     a = ap.parse_args()
     LANG = detect_lang(load_config(), a.lang)
-    {"tui": tui, "calibrate": calibrate, "dump": dump, "json": dump_json, "make-profile": make_profile, **extra}.get(a.mode, lambda: qt_app(a.mode))()
+    {"tui": tui, "calibrate": calibrate, "dump": dump, "json": dump_json, "make-profile": make_profile, "report": make_report, **extra}.get(a.mode, lambda: qt_app(a.mode))()
 
 
 if __name__ == "__main__":
