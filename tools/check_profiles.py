@@ -6,7 +6,7 @@ import os
 import sys
 
 KINDS = {"usb", "usbc", "hdmi", "dp", "vga", "rj45", "audio", "dc", "card", "dockport", "barrel", "sidedock", "smartcard", "sim", "lock", "sdslot", "barrel_led", "barrel_dot"}
-ROLES = {"power", "eth", "dock", "card", "jack"}
+ROLES = {"power", "eth", "dock", "card", "jack", "usb_audio"}
 root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "profiles")
 errors = 0
 for f in sorted(glob.glob(os.path.join(root, "*", "*.json"))):

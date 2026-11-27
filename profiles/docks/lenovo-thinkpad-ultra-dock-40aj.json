@@ -38,7 +38,9 @@
       "g": "dock",
       "x": 0.063,
       "mark": "🎧",
-      "label": "@audio"
+      "label": "@audio",
+      "role": "usb_audio",
+      "match_sink": "ThinkPad_Dock"
     },
     {
       "id": "vga",
@@ -157,6 +159,11 @@
     "dock2.3": "usb4",
     "dock3.3": "usb4",
     "dock2.4": "usbc2",
-    "dock3.4": "usbc2"
+    "dock3.4": "usbc2",
+    "dock2.1": "usbc1",
+    "dock3.1": "usbc1"
+  },
+  "video": {
+    "DP-1": "vga"
   }
 }

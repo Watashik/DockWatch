@@ -167,6 +167,8 @@ TR = {
     "close": {"uk": "Закрити", "ru": "Закрыть", "en": "Close"},
     "kbd": {"uk": "Підсвітка клавіатури", "ru": "Подсветка клавиатуры", "en": "Keyboard backlight"},
     "kbd_off": {"uk": "вимкнена", "ru": "выключена", "en": "off"},
+    "dock_audio_out": {"uk": "🎧 звук іде через док", "ru": "🎧 звук идёт через док", "en": "🎧 sound goes through the dock"},
+    "playing": {"uk": "грає", "ru": "играет", "en": "playing"},
     "dock_hidden": {"uk": "док прихований (неактивний)", "ru": "док скрыт (неактивен)", "en": "dock hidden (inactive)"},
 }
 LANG = "en"
@@ -791,6 +793,20 @@ def audio_jack():
     return "headset" if hp and mic else "headphones" if hp else ""
 
 
+def usb_audio_state(substr):
+    """Состояние USB-звуковой карты (напр. дока): None — не выбрана выводом по умолчанию, иначе RUNNING/IDLE/SUSPENDED."""
+    try:
+        default = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True, timeout=2).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if substr.lower() not in default.lower():
+        return None
+    for x in _pactl_json("list", "sinks") or []:
+        if x.get("name") == default:
+            return x.get("state", "IDLE")
+    return "IDLE"
+
+
 def sd_cards():
     """Карты памяти в кард-ридере: размер, метка, где смонтирована, скорость чтения/записи."""
     out = []
@@ -947,7 +963,8 @@ def snapshot(cfg=None):
         if not v["connected"]:
             continue
         item = f"🖥 {v['monitor'] or tr('monitor')} · {v['mode']}" + ("" if v["edid"] else f" · {tr('no_edid')}")
-        pid = cfg["video"].get(v["conn"]) or drm_default.get(v["conn"])
+        pid = cfg["video"].get(v["conn"]) or drm_default.get(v["conn"]) or \
+            {**(laptop or {}).get("video", {}), **(dock or {}).get("video", {})}.get(v["conn"])
         if pid in ports:
             put(pid, item)
         else:
@@ -985,6 +1002,11 @@ def snapshot(cfg=None):
             ports[card]["rate"] += spd
         else:
             loose.append(item); loose_stats.append(stat if show else "")
+    for pid, p in ports.items():  # звуковая карта дока (USB): гнездо без датчика — показываем выбранный вывод
+        if p.get("role") == "usb_audio" and p["owner"] == "dock" and docked:
+            ua = usb_audio_state(p.get("match_sink", "Dock"))
+            if ua:
+                put(pid, tr("dock_audio_out"), tr("playing") if ua == "RUNNING" else "")
     jack = audio_jack()
     if jack:
         pid = by_role("jack", owner) or by_role("jack", "laptop")
