@@ -800,6 +800,23 @@ def sd_cards():
     return out
 
 
+def os_info():
+    """Система: название и логотип из /etc/os-release, ядро, окружение рабочего стола."""
+    rel = {}
+    for line in rd("/etc/os-release").splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            rel[k] = v.strip().strip('"')
+    logo = rel.get("LOGO") or rel.get("ID", "")
+    path = next((f for f in (f"/usr/share/icons/{logo}.svg", f"/usr/share/icons/{logo}.png",
+                             f"/usr/share/pixmaps/{logo}.svg", f"/usr/share/pixmaps/{logo}.png") if os.path.exists(f)), "")
+    de = os.environ.get("XDG_CURRENT_DESKTOP", "").split(":")[0]
+    if de.upper() == "KDE":
+        de = "KDE Plasma" + (f" {os.environ['KDE_SESSION_VERSION']}" if os.environ.get("KDE_SESSION_VERSION") else "")
+    return {"name": rel.get("NAME") or rel.get("PRETTY_NAME") or "Linux", "version": rel.get("VERSION_ID", ""),
+            "logo": logo, "logo_path": path, "kernel": os.uname().release, "desktop": de}
+
+
 def sensors():
     """Температуры (CPU, GPU, SSD) и обороты вентиляторов из hwmon — без root."""
     temps, fans = {}, []
@@ -843,6 +860,9 @@ def human(n):
             return f"{n:.0f} {u}" if u == "B" else f"{n:.1f} {u}"
         n /= 1024
     return f"{n:.1f} PB"
+
+
+OS_INFO = os_info()
 
 
 def snapshot(cfg=None):
@@ -966,7 +986,7 @@ def snapshot(cfg=None):
     return {"docked": docked, "groups": groups, "ports": ports, "loose": loose, "loose_stats": loose_stats,
             "busy": busy, "total": len(ports), "power": pw, "dock": dock, "laptop": laptop, "dock_hidden": dock_hidden,
             "show_stats": show, "sensors": sensors(), "media": media_state(),
-            "battery": battery_info(), "net": net_info(), "lid_closed": lid_closed(), "ts": time.time()}
+            "battery": battery_info(), "net": net_info(), "lid_closed": lid_closed(), "os": OS_INFO, "ts": time.time()}
 
 
 def diff(old, new):
@@ -1007,7 +1027,7 @@ def dump_json():
            "dock": (s["dock"] or {}).get("name"), "laptop": (s["laptop"] or {}).get("name"),
            "ports": [{"id": p["id"], "label": p["label"], "group": p["g"], "busy": p["busy"], "items": p["items"],
                       "stats": p["stats"]} for p in s["ports"].values()],
-           "loose": s["loose"], "media": s["media"], "sensors": s["sensors"], "power": s["power"]}
+           "loose": s["loose"], "media": s["media"], "sensors": s["sensors"], "power": s["power"], "os": s["os"]}
     print(json.dumps(out, ensure_ascii=False))
 
 
@@ -1023,6 +1043,8 @@ def dump():
             if p["g"] == g["id"]:
                 det = "; ".join(i + (f"  [{st}]" if st else "") for i, st in zip(p["items"], p["stats"]))
                 print(f"  {'●' if p['busy'] else '○'} {p['label']:<9} {det}")
+    o = s["os"]
+    print(f"🐧 {o['name']} {o['version']}".rstrip() + f" · {o['kernel']}" + (f" · {o['desktop']}" if o["desktop"] else ""))
     print("   ".join(media_lines(s["media"])))
     if sensors_text(s["sensors"]):
         print(sensors_text(s["sensors"]))
@@ -1636,6 +1658,22 @@ def qt_app(mode):
             q.drawLine(QPointF(78 if ib else 26, fy), QPointF(W - 230, fy)); q.drawLine(QPointF(W - 230, fy), QPointF(W - 230, fy - 14))
             q.setFont(font(12, italic=True)); q.setPen(TXT)
             q.drawText(QRectF(W - 222, fy - 16, 210, 18), Qt.AlignLeft, "Technologies and Design")
+            o = self.s.get("os") or {}
+            if o:  # система: логотип дистрибутива + название, ядро, рабочий стол
+                if not hasattr(self, "os_icon"):
+                    ic = QIcon.fromTheme(o["logo"]) if o["logo"] else QIcon()
+                    if ic.isNull() and o["logo_path"]:
+                        ic = QIcon(o["logo_path"])
+                    if ic.isNull():
+                        ic = QIcon.fromTheme("distributor-logo")
+                    self.os_icon = None if ic.isNull() else ic.pixmap(64, 64)
+                txt = f"{o['name']} {o['version']}".rstrip() + f"  ·  {o['kernel']}" + (f"  ·  {o['desktop']}" if o["desktop"] else "")
+                q.setFont(font(11)); fm = QFontMetricsF(font(11))
+                tw = fm.horizontalAdvance(txt)
+                x0 = (W - tw) / 2 + 12
+                if self.os_icon is not None:
+                    q.drawPixmap(QRectF(x0 - 24, fy - 23, 18, 18), self.os_icon, QRectF(self.os_icon.rect()))
+                q.setPen(DIM); q.drawText(QPointF(x0, fy - 9), txt)
             q.end()
 
         def contextMenuEvent(self, e):
