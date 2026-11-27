@@ -11,11 +11,9 @@ what is plugged into each one, how much power and bandwidth it takes, and pops u
 
 Other laptops (profiles made from photos):
 
-| HP EliteBook Folio 1040 G3 | Acer Nitro V 15 |
-|---|---|
-| ![HP](docs/theme-hp.png) | ![Nitro](docs/theme-nitro.png) |
-| **Lenovo IdeaPad Gaming 3 15ACH6** | **Pixus Rise** |
-| ![IdeaPad](docs/laptop-ideapad.png) | ![Pixus](docs/laptop-pixus.png) |
+| HP EliteBook Folio 1040 G3 | Acer Nitro V 15 | Lenovo IdeaPad Gaming 3 15ACH6 |
+|---|---|---|
+| ![HP](docs/theme-hp.png) | ![Nitro](docs/theme-nitro.png) | ![IdeaPad](docs/laptop-ideapad.png) |
 
 Screenshots in other languages: [українська](docs/screenshot-uk.png) · [русский](docs/screenshot-ru.png)
 
@@ -95,7 +93,6 @@ NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-l
 | Laptop | Lenovo IdeaPad Gaming 3 15ACH6 | `profiles/laptops/lenovo-ideapad-gaming-3-15ach6.json` |
 | Laptop | HP EliteBook Folio 1040 G3 | `profiles/laptops/hp-elitebook-folio-1040-g3.json` |
 | Laptop | Acer Nitro V 15 (ANV15-51) | `profiles/laptops/acer-nitro-v15-anv15-51.json` |
-| Laptop | Pixus Rise | `profiles/laptops/pixus-rise.json` |
 | Laptop | anything else | auto layout (see *Any laptop* above) |
 
 Only the ThinkPad L14 + 40AJ pair is calibrated on real hardware; the other laptops are laid out from photos and need
