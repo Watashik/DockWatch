@@ -25,7 +25,7 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 REPO = "Watashik/DockWatch"
 PROFILES = os.path.join(HERE, "profiles")
 CONFIG_DIR = os.path.expanduser("~/.config/dockwatch")

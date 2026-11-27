@@ -15,6 +15,11 @@ Other laptops (profiles made from photos):
 |---|---|---|
 | ![HP](docs/theme-hp.png) | ![Nitro](docs/theme-nitro.png) | ![IdeaPad](docs/laptop-ideapad.png) |
 
+Top view (button next to ⚙): the laptop from above with its real keyboard, ports on their sides and the dock behind it;
+keys light up as you press them, connected devices and events open in their own windows.
+
+![Top view](docs/top-view.png)
+
 Screenshots in other languages: [українська](docs/screenshot-uk.png) · [русский](docs/screenshot-ru.png)
 
 **Languages:** українська · русский · English (auto from `$LANG`; switch in the menu or with `--lang`).
@@ -49,9 +54,11 @@ Screenshots in other languages: [українська](docs/screenshot-uk.png) �
 - **Layout editor** (menu → *Edit layout*): drag ports along a side or to another side, right-click to change the type,
   rename, add or delete; saved to `~/.config/dockwatch/profiles`.
 - Settings button (⚙) in the bottom-right corner of the window, and next to it the **top view** button: the whole laptop
-  from above with its keyboard, ports on their real sides and the dock behind it.
+  from above with its keyboard (keys light up when pressed, layout-independent), ports on their real sides and the dock
+  behind it; in this view the connected devices and the events open in separate windows (buttons with counters).
 - Light/dark theme can follow the system (KDE, GNOME, Qt colour scheme).
-- Plug animation on connect (experimental, off by default).
+- Plug animation on connect (experimental, off by default): the metal goes into the connector, the plug body stays
+  outside and fades; also in the top view.
 - Smooth glow when a port lights up, a short chime on plug/unplug (can be turned off).
 - **Plasma 6 panel widget**: dock icon with the number of busy ports, click for the list (installed by `install.sh`;
   right-click the panel → Add Widgets → DockWatch).
