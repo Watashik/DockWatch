@@ -36,7 +36,7 @@ body:
     id: order
     attributes:
       label: Ports from left to right
-      description: For each side, list the connectors left → right (e.g. "Rear: DC, RJ45, USB-A, USB-A, HDMI, DP, DP").
+      description: 'For each side, list the connectors left → right (e.g. "Rear: DC, RJ45, USB-A, USB-A, HDMI, DP, DP").'
     validations:
       required: true
   - type: markdown
