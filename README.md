@@ -9,6 +9,14 @@ what is plugged into each one, how much power and bandwidth it takes, and pops u
 |---|---|
 | ![IBM](docs/theme-ibm.png) | ![Light](docs/theme-light.png) |
 
+Other laptops (profiles made from photos):
+
+| HP EliteBook Folio 1040 G3 | Acer Nitro V 15 |
+|---|---|
+| ![HP](docs/theme-hp.png) | ![Nitro](docs/theme-nitro.png) |
+| **Lenovo IdeaPad Gaming 3 15ACH6** | **Pixus Rise** |
+| ![IdeaPad](docs/laptop-ideapad.png) | ![Pixus](docs/laptop-pixus.png) |
+
 Screenshots in other languages: [українська](docs/screenshot-uk.png) · [русский](docs/screenshot-ru.png)
 
 **Languages:** українська · русский · English (auto from `$LANG`; switch in the menu or with `--lang`).
@@ -21,7 +29,9 @@ Screenshots in other languages: [українська](docs/screenshot-uk.png) �
 - SD card slot, 3.5 mm jack (headphones / headset), HDMI/DP/VGA monitors (name from EDID, resolution).
 - Header: camera and microphones state (in use by which app, muted), F1/F4 mute LEDs, sound volume,
   battery level, wear and cycles, power profile, Wi‑Fi network, connected Bluetooth devices with battery.
-- Temperatures (CPU/GPU/SSD) and fan RPM under the vent grille, which glows as the laptop heats up.
+- Temperatures (CPU/GPU/SSD, NVIDIA via `nvidia-smi`) and fan RPM under the vent grille, which glows as the laptop heats up;
+  with two grilles each one can show its own chip (e.g. CPU on the left, GPU on the right).
+- Status LEDs on the case (power, charging — with the real colours, e.g. red below 90 %, white when full).
 - Right-click a port with a drive: **open** it or **safely remove** it.
 - "Don't forget your flash drive" reminder when you undock or close the lid with a drive still mounted.
 - Connection log (`~/.local/share/dockwatch/history.log`), start at login, power profile switching.
@@ -29,8 +39,15 @@ Screenshots in other languages: [українська](docs/screenshot-uk.png) �
 - A USB-C that is also the dock connector is shown as USB-C when undocked and as the dock when docked.
 - **Settings window**: language, theme, scale, sound, animations, options; rename ports; give your own names to devices
   (recognised by serial number — right-click a port → *Rename device*).
-- **Themes**: ThinkPad (black, red), IBM (red/green/blue accents and the striped IBM logo), Light (white ports and keys).
-- Smooth glow when a port lights up, a fan icon spinning at the real RPM, a short chime on plug/unplug (can be turned off).
+- **Themes**: ThinkPad (black, red), IBM (red/green/blue accents and the striped IBM logo), Light (white ports and keys),
+  plus brand themes picked automatically: Lenovo, Legion, ASUS / ROG, Dell / Alienware, HP / OMEN, Acer / Nitro, MSI,
+  Razer, Samsung, Huawei, Xiaomi, Gigabyte, Framework, Apple.
+- **Any laptop**: without a profile DockWatch builds a layout itself from `/sys` (USB / USB-C, HDMI, LAN, jack,
+  card reader, camera) and picks the brand theme; `dockwatch make-profile` saves it as JSON to refine.
+- **Layout editor** (menu → *Edit layout*): drag ports along a side or to another side, right-click to change the type,
+  rename, add or delete; saved to `~/.config/dockwatch/profiles`.
+- Settings button (⚙) in the bottom-right corner of the window.
+- Smooth glow when a port lights up, a short chime on plug/unplug (can be turned off).
 - **Plasma 6 panel widget**: dock icon with the number of busy ports, click for the list (installed by `install.sh`;
   right-click the panel → Add Widgets → DockWatch).
 - `dockwatch json` — machine-readable state for scripts and widgets.
@@ -44,6 +61,8 @@ Screenshots in other languages: [українська](docs/screenshot-uk.png) �
 | `dockwatch tui` | terminal version (curses) |
 | `dockwatch dump` | plain-text state |
 | `dockwatch calibrate` | bind system USB ports to physical connectors: plug a flash drive into each one |
+| `dockwatch make-profile` | print a profile of this laptop (auto layout) as JSON |
+| `dockwatch json` | machine-readable state for scripts and widgets |
 
 ## Install
 ```sh
@@ -71,9 +90,16 @@ NetworkManager, bluez-utils, power-profiles-daemon. Only `/sys` and these user-l
 | Dock | Lenovo ThinkPad Ultra Docking Station (40AJ) | `profiles/docks/lenovo-thinkpad-ultra-dock-40aj.json` |
 | Dock (draft) | Lenovo ThinkPad USB-C Dock Gen 2 (40AS) | `profiles/docks/lenovo-thinkpad-usb-c-dock-gen2-40as.json` |
 | Dock (draft) | Dell WD19 | `profiles/docks/dell-wd19.json` |
+| Dock | HP UltraSlim Docking Station (2013) | `profiles/docks/hp-ultraslim-dock-2013.json` |
 | Laptop | Lenovo ThinkPad L14 Gen 1 | `profiles/laptops/lenovo-thinkpad-l14-gen1.json` |
+| Laptop | Lenovo IdeaPad Gaming 3 15ACH6 | `profiles/laptops/lenovo-ideapad-gaming-3-15ach6.json` |
+| Laptop | HP EliteBook Folio 1040 G3 | `profiles/laptops/hp-elitebook-folio-1040-g3.json` |
+| Laptop | Acer Nitro V 15 (ANV15-51) | `profiles/laptops/acer-nitro-v15-anv15-51.json` |
+| Laptop | Pixus Rise | `profiles/laptops/pixus-rise.json` |
+| Laptop | anything else | auto layout (see *Any laptop* above) |
 
-*Draft* profiles are made from spec sheets and not verified on real hardware; they are only selectable manually in the menu until someone confirms them.
+Only the ThinkPad L14 + 40AJ pair is calibrated on real hardware; the other laptops are laid out from photos and need
+`dockwatch calibrate` once. *Draft* profiles are made from spec sheets and not verified on real hardware; they are only selectable manually in the menu until someone confirms them.
 
 Docks are detected by the VID:PID of their internal USB hubs, laptops by DMI; both can be chosen manually in the menu.
 
@@ -81,12 +107,19 @@ Docks are detected by the VID:PID of their internal USB hubs, laptops by DMI; bo
 Profiles are plain JSON — copy an existing one:
 - `match` — detection: `usb_hubs` (VID:PID of the dock's hubs, see `lsusb`) or `dmi` (substring of `/sys/class/dmi/id/product_version`).
 - `groups` — physical sides; `row` + `w` put several on one line; `vents` draws a grille with sensors (`"sensors": {"temps": ["CPU"], "fans": [0]}` gives each grille its own — e.g. CPU on the left, `dGPU`/SSD on the right); `bezel` enables the camera/mic header.
-- `ports` — connectors left→right: `kind` (`usb`, `usbc`, `hdmi`, `dp`, `vga`, `rj45`, `audio`, `dc`, `card`, `dockport`),
-  `x` — centre as a fraction of the side width, `label`, optional `role` (`power`, `eth`, `dock`, `card`, `jack`),
+- `ports` — connectors left→right: `kind` (`usb`, `usbc`, `hdmi`, `dp`, `minidp`, `microhdmi`, `vga`, `rj45`, `audio`,
+  `dc`, `barrel`, `barrel_led`, `barrel_dot`, `card`, `sdslot`, `sim`, `smartcard`, `dockport`, `sidedock`, `lock`, `led`),
+  `x` — centre as a fraction of the side width, `label`, optional `role` (`power`, `eth`, `dock`, `card`, `jack`, `usb_audio`),
   `label_docked`, `typec` (e.g. `port0`) and `drm` (e.g. `["HDMI-A-1"]`).
+  LEDs: `"led": "power"` or `"charge"`, optional `"led_colors": {"low": "#ff3b30", "full": "#ffffff", "full_at": 90}`.
+- `theme`, `brand` (header wordmark), `footer` — looks.
 
 Check it with `python tools/check_profiles.py` (also run by GitHub Actions on every push), then run `dockwatch calibrate` once. New profiles are welcome — open an issue with the **New dock / laptop profile** form
 (photo of the ports + `lsusb`).
+
+## Plugins
+Drop a `*.py` into `~/.local/share/dockwatch/plugins/`. A plugin may define `TR` (translations), `CLI` (extra commands),
+`on_start(ctx)`, `on_tick(state, events, ctx)` and `menu(add, ctx)`; the DockWatch module is available as `dw`.
 
 ## Config
 `~/.config/dockwatch/config.json` — port bindings, custom labels, language, chosen profiles, options.
